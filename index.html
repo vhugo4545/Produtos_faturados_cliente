@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Pedidos (visão agrupada)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#f7f9fc;--card:#fff;--text:#0f172a;--muted:#64748b;--primary:#2563eb;--border:#e5e7eb;--radius:14px;--shadow:0 10px 30px rgba(15,23,42,.06)}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#f9fbff 0%,var(--bg) 100%);color:var(--text)}
+  .wrap{max-width:1100px;margin:20px auto;padding:0 16px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .input{border:1px solid var(--border);border-radius:10px;padding:8px 10px;font:inherit;background:#fff}
+  .btn{border:1px solid var(--border);background:#fff;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer}
+  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+  .muted{color:var(--muted);font-size:13px}
+  .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
+  table{width:100%;border-collapse:separate;border-spacing:0;min-width:760px}
+  thead th{position:sticky;top:0;background:#f8fafc;text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);padding:10px 8px}
+  tbody td{border-bottom:1px solid var(--border);padding:10px 8px;vertical-align:top}
+  tbody tr:nth-child(even){background:#fafcff}
+  .right{text-align:right}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="toolbar">
+        <input id="q" class="input" placeholder="Buscar por Nº Pedido, Cliente ou Fornecedor…" />
+        <button id="buscar" class="btn">Buscar</button>
+        <button id="atualizar" class="btn">Atualizar</button>
+        <span id="status" class="muted">status: pronto</span>
+      </div>
+
+      <div class="table-wrap">
+        <table id="tabela">
+          <thead>
+            <tr>
+              <th>Nº Pedido</th>
+              <th>Cliente</th>
+              <th>Fornecedor</th>
+              <th>Itens</th>
+              <th class="right">Total</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody><!-- linhas --></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+const BASE_URL = 'http://localhost:3000';
+const $ = (s,root=document)=>root.querySelector(s);
+const setStatus = t => { const el=$('#status'); if(el) el.textContent='status: '+t; };
+const fmtBRL = n => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0));
+const fmtData = v => { if(!v) return ''; const d=new Date(v); if(isNaN(d)) return String(v); return d.toLocaleDateString('pt-BR'); };
+
+async function listar(q=''){
+  setStatus('carregando…');
+  const url = new URL(BASE_URL + '/api/produtos');
+  url.searchParams.set('limit','2000');
+  if(q) url.searchParams.set('q', q);
+  const r = await fetch(url);
+  const j = await r.json();
+  if(!j.ok) { setStatus('erro'); alert(j.error||'Falha ao listar'); return; }
+  setStatus('processando…');
+  desenhar(agruparPorPedido(j.data||[]));
+  setStatus(`ok — ${Object.keys(agruparPorPedido(j.data||[])).length} pedido(s)`);
+}
+
+function agruparPorPedido(docs){
+  // Agrupa por numeroPedido. Em cada grupo, soma valorReal e pega cliente/fornecedor do 1º.
+  const map = new Map();
+  for (const d of docs){
+    const key = String(d.numeroPedido||'').trim();
+    if(!key) continue;
+    if(!map.has(key)){
+      map.set(key, { numeroPedido: key, cliente: d.cliente||'-', fornecedor: d.fornecedor||'-', itens: [], total: 0 });
+    }
+    const g = map.get(key);
+    g.itens.push(d);
+    g.total += Number(d.valorReal || 0);
+  }
+  return Object.fromEntries(map.entries());
+}
+
+function desenhar(groups){
+  const tbody = $('#tabela tbody'); tbody.innerHTML='';
+  const frag = document.createDocumentFragment();
+  Object.values(groups).forEach(g=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${g.numeroPedido}</td>
+      <td>${g.cliente}</td>
+      <td>${g.fornecedor}</td>
+      <td>${g.itens.length}</td>
+      <td class="right">${fmtBRL(g.total)}</td>
+      <td><button class="btn primary" data-view>Visualizar</button></td>
+    `;
+    tr.querySelector('[data-view]').onclick = () => {
+      // abre página de gerenciamento
+      const url = new URL(window.location.origin + '/gerenciar.html');
+      url.searchParams.set('pedido', g.numeroPedido);
+      window.location.href = url.toString();
+    };
+    frag.appendChild(tr);
+  });
+  tbody.appendChild(frag);
+}
+
+$('#buscar').onclick = ()=> listar($('#q').value.trim());
+$('#atualizar').onclick = ()=> listar($('#q').value.trim());
+$('#q').addEventListener('keydown', e=>{ if(e.key==='Enter') listar($('#q').value.trim()); });
+
+(async function init(){ await listar(); })();
+</script>
+</body>
+</html>

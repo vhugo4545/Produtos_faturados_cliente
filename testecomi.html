@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teste de Envio de Comissão</title>
+  <style>
+    body {
+      font-family: Inter, Arial, sans-serif;
+      background: #f5f7fa;
+      color: #222;
+      margin: 0;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      color: #0052cc;
+      margin-bottom: 20px;
+    }
+
+    form {
+      background: white;
+      padding: 20px 30px;
+      border-radius: 12px;
+      box-shadow: 0 5px 15px rgba(0,0,0,.1);
+      max-width: 420px;
+      width: 100%;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-top: 15px;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+
+    button {
+      background: #0052cc;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 15px;
+      margin-top: 20px;
+      width: 100%;
+    }
+
+    button:hover {
+      background: #003d99;
+    }
+
+    pre {
+      background: #111;
+      color: #0f0;
+      padding: 15px;
+      margin-top: 25px;
+      width: 100%;
+      max-width: 720px;
+      border-radius: 8px;
+      font-size: 14px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Teste de Envio de Comissão → Omie</h1>
+
+  <form id="formComissao">
+    <label>Valor da Comissão (R$)</label>
+    <input type="number" step="0.01" id="valor" required value="1500.00">
+
+    <label>Data de Vencimento</label>
+    <input type="date" id="vencimento" required>
+
+    <label>Data de Previsão</label>
+    <input type="date" id="previsao" required>
+
+    <label>Observação (opcional)</label>
+    <textarea id="obs" rows="2" placeholder="Ex: Comissão consultor Rodrigo"></textarea>
+
+    <button type="submit">Enviar para Omie</button>
+  </form>
+
+  <pre id="saida">Aguardando envio...</pre>
+
+  <script>
+    document.getElementById('formComissao').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const saida = document.getElementById('saida');
+      saida.textContent = "Enviando...";
+
+      const valor_documento = parseFloat(document.getElementById('valor').value);
+      const data_vencimento = new Date(document.getElementById('vencimento').value)
+        .toLocaleDateString('pt-BR');
+      const data_previsao = new Date(document.getElementById('previsao').value)
+        .toLocaleDateString('pt-BR');
+      const observacao = document.getElementById('obs').value;
+
+      try {
+        const res = await fetch("http://localhost:3000/api/omie/comissao", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ valor_documento, data_vencimento, data_previsao, observacao })
+        });
+
+        const json = await res.json();
+        saida.textContent = JSON.stringify(json, null, 2);
+      } catch (err) {
+        saida.textContent = "❌ Erro ao enviar: " + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
