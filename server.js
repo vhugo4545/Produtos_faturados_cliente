@@ -8,7 +8,8 @@ dotenv.config();
 
 // ====== FALLBACKS (use .env em produção) ======
 const {
-  MONGO_URI = "mongodb+srv://USUARIO:SENHA@HOST/DB?retryWrites=true&w=majority",
+  // use .env em produção; fallback local para desenvolvimento
+  MONGO_URI = "mongodb://127.0.0.1:27017/proposta-db",
   PORT = 3000,
   OMIE_APP_KEY = "CHANGEME",
   OMIE_APP_SECRET = "CHANGEME",
@@ -94,37 +95,40 @@ function computeDerived(doc) {
 /* ===============
    Schema/Modelo
    =============== */
-const PedidoVidroSchema = new mongoose.Schema({
-  numeroPedido: String,
-  cliente: String,
-  fornecedor: String,
-  vidro: String,
-  tipo: String,
-  quantidade: Number,
-  orcamentoEnviado: String,
-  aprovacao: String,
-  moldeEnviado: String,
-  recebemosLinkPagamento: String,
-  pagamento: String,
-  previsao: Date,
-  numeroPedidoFornecedor: String,
-  vidrosProntos: Date,
-  naEmpresa: Date,
-  faturamento: String,
-  responsavelVendedor: String,
-  numeroOrcFornecedor: String,
-  valorTotalPedido: Number,
-  valorTotalFaturamentoDiretoOrcado: Number,
-  valorAproximadoUF: Number,
-  valorTotalNFProdutos: Number,
-  valorTotalNFServicos: Number,
-  valorReal: Number,
-  residuoDiferencaFaturamentoServico: Number,
-  numeroNotaFiscal: String,
-  formaPagamento: String,
-  observacao: String,
-  meta: mongoose.Schema.Types.Mixed,
-}, { timestamps: true });
+const PedidoVidroSchema = new mongoose.Schema(
+  {
+    numeroPedido: String,
+    cliente: String,
+    fornecedor: String,
+    vidro: String,
+    tipo: String,
+    quantidade: Number,
+    orcamentoEnviado: String,
+    aprovacao: String,
+    moldeEnviado: String,
+    recebemosLinkPagamento: String,
+    pagamento: String,
+    previsao: Date,
+    numeroPedidoFornecedor: String,
+    vidrosProntos: Date,
+    naEmpresa: Date,
+    faturamento: String,
+    responsavelVendedor: String,
+    numeroOrcFornecedor: String,
+    valorTotalPedido: Number,
+    valorTotalFaturamentoDiretoOrcado: Number,
+    valorAproximadoUF: Number,
+    valorTotalNFProdutos: Number,
+    valorTotalNFServicos: Number,
+    valorReal: Number,
+    residuoDiferencaFaturamentoServico: Number,
+    numeroNotaFiscal: String,
+    formaPagamento: String,
+    observacao: String,
+    meta: mongoose.Schema.Types.Mixed,
+  },
+  { timestamps: true }
+);
 
 PedidoVidroSchema.pre("save", function (next) {
   computeDerived(this);
@@ -134,21 +138,24 @@ PedidoVidroSchema.pre("save", function (next) {
 PedidoVidroSchema.pre("findOneAndUpdate", function (next) {
   const update = this.getUpdate() || {};
   const target = update.$set ? update.$set : update;
-  this.model.findOne(this.getQuery()).then((doc) => {
-    if (doc) {
-      const merged = { ...doc.toObject(), ...target };
-      computeDerived(merged);
-      if (update.$set) {
-        update.$set.valorAproximadoUF = merged.valorAproximadoUF;
-        update.$set.residuoDiferencaFaturamentoServico = merged.residuoDiferencaFaturamentoServico;
-      } else {
-        update.valorAproximadoUF = merged.valorAproximadoUF;
-        update.residuoDiferencaFaturamentoServico = merged.residuoDiferencaFaturamentoServico;
+  this.model
+    .findOne(this.getQuery())
+    .then((doc) => {
+      if (doc) {
+        const merged = { ...doc.toObject(), ...target };
+        computeDerived(merged);
+        if (update.$set) {
+          update.$set.valorAproximadoUF = merged.valorAproximadoUF;
+          update.$set.residuoDiferencaFaturamentoServico = merged.residuoDiferencaFaturamentoServico;
+        } else {
+          update.valorAproximadoUF = merged.valorAproximadoUF;
+          update.residuoDiferencaFaturamentoServico = merged.residuoDiferencaFaturamentoServico;
+        }
+        this.setUpdate(update);
       }
-      this.setUpdate(update);
-    }
-    next();
-  }).catch(next);
+      next();
+    })
+    .catch(next);
 });
 
 const PedidoVidro = mongoose.model("PedidoVidro", PedidoVidroSchema);
@@ -163,13 +170,16 @@ app.use(express.json({ limit: "10mb" }));
 /* =======================
    Rotas CRUD Mongo
    ======================= */
-app.get("/", (req, res) => res.json({ ok: true, msg: "API de Produtos Faturados Direto ativa." }));
+app.get("/", (req, res) =>
+  res.json({ ok: true, msg: "API de Produtos Faturados Direto ativa." })
+);
 
 app.post("/api/produtos", async (req, res) => {
   try {
     const created = await PedidoVidro.create(req.body);
     res.status(201).json({ ok: true, data: created });
   } catch (err) {
+    console.error("❌ Erro ao criar produto:", err.message);
     res.status(400).json({ ok: false, error: err.message });
   }
 });
@@ -179,16 +189,22 @@ app.get("/api/produtos", async (req, res) => {
     const data = await PedidoVidro.find().sort({ createdAt: -1 });
     res.json({ ok: true, data });
   } catch (err) {
+    console.error("❌ Erro ao listar produtos:", err.message);
     res.status(400).json({ ok: false, error: err.message });
   }
 });
 
 app.put("/api/produtos/:id", async (req, res) => {
   try {
-    const updated = await PedidoVidro.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    const updated = await PedidoVidro.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
     if (!updated) return res.status(404).json({ ok: false, error: "não encontrado" });
     res.json({ ok: true, data: updated });
   } catch (err) {
+    console.error("❌ Erro ao atualizar produto:", err.message);
     res.status(400).json({ ok: false, error: err.message });
   }
 });
@@ -199,9 +215,20 @@ app.delete("/api/produtos/:id", async (req, res) => {
     if (!removed) return res.status(404).json({ ok: false, error: "não encontrado" });
     res.json({ ok: true, data: removed });
   } catch (err) {
+    console.error("❌ Erro ao remover produto:", err.message);
     res.status(400).json({ ok: false, error: err.message });
   }
 });
+
+
+
+
+
+
+
+
+
+
 
 /* =======================
    🔹 Nova rota Omie - Comissão

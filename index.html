@@ -8,80 +8,620 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#f7f9fc;--card:#fff;--text:#0f172a;--muted:#64748b;--primary:#2563eb;--border:#e5e7eb;--radius:14px;--shadow:0 10px 30px rgba(15,23,42,.06)}
-  *{box-sizing:border-box}
-  body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#f9fbff 0%,var(--bg) 100%);color:var(--text)}
-  .wrap{max-width:1100px;margin:20px auto;padding:0 16px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
-  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-  .input{border:1px solid var(--border);border-radius:10px;padding:8px 10px;font:inherit;background:#fff}
-  .btn{border:1px solid var(--border);background:#fff;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer}
-  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
-  .muted{color:var(--muted);font-size:13px}
-  .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
-  table{width:100%;border-collapse:separate;border-spacing:0;min-width:760px}
-  thead th{position:sticky;top:0;background:#f8fafc;text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);padding:10px 8px}
-  tbody td{border-bottom:1px solid var(--border);padding:10px 8px;vertical-align:top}
-  tbody tr:nth-child(even){background:#fafcff}
+  :root{
+    --bg:#eef3ff;
+    --bg-alt:#f7f9fc;
+    --card:#ffffff;
+    --text:#0f172a;
+    --muted:#64748b;
+    --primary:#2563eb;
+    --primary-soft:#dbeafe;
+    --border:#e5e7eb;
+    --radius:14px;
+    --shadow:0 18px 40px rgba(15,23,42,.08);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+
+  body{
+    margin:0;
+    min-height:100vh;
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    color:var(--text);
+    background:radial-gradient(circle at top left,#e0ecff 0,transparent 55%),
+                radial-gradient(circle at bottom right,#e5f3ff 0,transparent 55%),
+                var(--bg-alt);
+  }
+
+  .wrap{
+    max-width:1320px;
+    margin:32px auto 40px;
+    padding:0 16px;
+  }
+
+  .page-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:16px;
+    margin-bottom:16px;
+  }
+
+  .page-title{
+    font-size:20px;
+    font-weight:600;
+    letter-spacing:-0.02em;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+
+  .page-title-pill{
+    font-size:12px;
+    padding:2px 8px;
+    border-radius:999px;
+    background:var(--primary-soft);
+    color:var(--primary);
+    font-weight:500;
+  }
+
+  .page-subtitle{
+    margin-top:4px;
+    font-size:13px;
+    color:var(--muted);
+  }
+
+  .page-meta{
+    text-align:right;
+    font-size:12px;
+    color:var(--muted);
+  }
+
+  .layout{
+    display:flex;
+    gap:16px;
+    align-items:flex-start;
+  }
+
+  .layout-main{
+    flex:2;
+  }
+
+  .layout-side{
+    flex:1.2;
+    min-width:280px;
+  }
+
+  .card{
+    background:var(--card);
+    border:1px solid rgba(148,163,184,.35);
+    border-radius:24px;
+    box-shadow:var(--shadow);
+    padding:18px 18px 16px;
+  }
+
+  .layout-side .card{
+    position:sticky;
+    top:16px;
+  }
+
+  .toolbar{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+    margin-bottom:12px;
+  }
+
+  .toolbar-left{
+    display:flex;
+    flex:1;
+    gap:8px;
+    min-width:0;
+    align-items:center;
+  }
+
+  .field-icon{
+    position:relative;
+    flex:1;
+    min-width:220px;
+  }
+
+  .field-icon svg{
+    position:absolute;
+    left:11px;
+    top:50%;
+    transform:translateY(-50%);
+    width:16px;
+    height:16px;
+    opacity:.55;
+  }
+
+  .input{
+    border:1px solid var(--border);
+    border-radius:999px;
+    padding:8px 12px 8px 32px;
+    font:inherit;
+    background:#fff;
+    width:100%;
+    transition:border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+  }
+
+  .input::placeholder{
+    color:#94a3b8;
+    font-size:13px;
+  }
+
+  .input:focus{
+    outline:none;
+    border-color:var(--primary);
+    box-shadow:0 0 0 1px rgba(37,99,235,.1),0 0 0 4px rgba(37,99,235,.08);
+    background:#f9fbff;
+  }
+
+  .btn{
+    border:1px solid var(--border);
+    background:#f9fafb;
+    border-radius:999px;
+    padding:8px 14px;
+    font-weight:600;
+    font-size:13px;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease,transform .08s ease;
+    color:var(--text);
+    white-space:nowrap;
+  }
+
+  .btn svg{
+    width:14px;
+    height:14px;
+  }
+
+  .btn:hover{
+    background:#f3f4f6;
+    box-shadow:0 6px 14px rgba(15,23,42,.08);
+    transform:translateY(-0.5px);
+  }
+
+  .btn:active{
+    transform:translateY(0);
+    box-shadow:none;
+  }
+
+  .btn.primary{
+    background:var(--primary);
+    border-color:var(--primary);
+    color:#fff;
+  }
+
+  .btn.primary:hover{
+    background:#1d4ed8;
+  }
+
+  .toolbar-right{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+
+  .muted{
+    color:var(--muted);
+    font-size:12px;
+  }
+
+  .status-dot{
+    display:inline-block;
+    width:7px;
+    height:7px;
+    border-radius:999px;
+    margin-right:6px;
+    background:#22c55e;
+  }
+
+  .status-dot.loading{
+    background:#fbbf24;
+  }
+
+  .status-dot.error{
+    background:#ef4444;
+  }
+
+  .table-wrap{
+    margin-top:6px;
+    overflow:auto;
+    border-radius:16px;
+    border:1px solid var(--border);
+    background:linear-gradient(180deg,#f9fbff 0,#f8fafc 100%);
+  }
+
+  table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    min-width:760px;
+    font-size:13px;
+  }
+
+  thead th{
+    position:sticky;
+    top:0;
+    z-index:1;
+    background:#f1f5f9;
+    text-align:left;
+    font-size:11px;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:#94a3b8;
+    border-bottom:1px solid var(--border);
+    padding:9px 10px;
+  }
+
+  tbody td{
+    border-bottom:1px solid #e5e7eb;
+    padding:10px 10px;
+    vertical-align:middle;
+    color:#0f172a;
+  }
+
+  tbody tr:nth-child(even){
+    background:#f9fbff;
+  }
+
+  tbody tr:hover{
+    background:#eef2ff;
+  }
+
+  tbody tr:last-child td{
+    border-bottom:none;
+  }
+
+  /* destaque do selecionado */
+  tbody td:first-child{
+    border-left:2px solid transparent;
+  }
+
+  tbody tr.is-selected{
+    background:#e0ecff !important;
+  }
+
+  tbody tr.is-selected td:first-child{
+    border-left-color:var(--primary);
+  }
+
   .right{text-align:right}
+  .center{text-align:center}
+
+  .mono{
+    font-variant-numeric:tabular-nums;
+    font-family:ui-monospace,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+    font-size:13px;
+  }
+
+  .tag-pill{
+    display:inline-flex;
+    align-items:center;
+    border-radius:999px;
+    padding:2px 8px;
+    font-size:11px;
+    font-weight:500;
+    background:#ecfeff;
+    color:#0e7490;
+  }
+
+  .tag-pill span{
+    margin-left:4px;
+    opacity:.7;
+  }
+
+  .pill-count{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:26px;
+    padding:3px 9px;
+    border-radius:999px;
+    background:#eef2ff;
+    color:#4338ca;
+    font-weight:600;
+    font-size:11px;
+  }
+
+  .actions-cell .btn{
+    padding:6px 12px;
+    font-size:12px;
+    border-radius:999px;
+  }
+
+  .empty-state{
+    padding:18px 16px;
+    font-size:13px;
+    color:var(--muted);
+    text-align:center;
+  }
+
+  /* painel de detalhes à direita */
+  .details-title{
+    font-size:15px;
+    font-weight:600;
+    margin-bottom:4px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+
+  .details-badge{
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:999px;
+    background:#e0ecff;
+    color:#3730a3;
+    font-weight:500;
+  }
+
+  .details-meta{
+    font-size:12px;
+    color:var(--muted);
+    margin-bottom:8px;
+  }
+
+  .details-chips{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-bottom:10px;
+  }
+
+  .details-chip{
+    font-size:11px;
+    padding:3px 8px;
+    border-radius:999px;
+    background:#f1f5f9;
+    color:#0f172a;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+  }
+
+  .details-chip span{
+    color:var(--muted);
+  }
+
+  .items-list{
+    list-style:none;
+    margin:10px 0 0;
+    padding:0;
+    max-height:260px;
+    overflow:auto;
+  }
+
+  .items-list li{
+    padding:6px 0;
+    border-bottom:1px dashed rgba(148,163,184,.4);
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+  }
+
+  .items-main{
+    font-size:12px;
+  }
+
+  .items-secondary{
+    font-size:11px;
+    color:var(--muted);
+  }
+
+  .items-price{
+    font-size:12px;
+    font-weight:500;
+  }
+
+  .more-items{
+    font-size:11px;
+    color:var(--muted);
+    text-align:right;
+    padding-top:4px;
+    border-bottom:none !important;
+  }
+
+  .details-footer{
+    margin-top:10px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+  }
+
+  .details-stat{
+    font-size:12px;
+    color:var(--muted);
+  }
+
+  .details-stat strong{
+    display:block;
+    font-size:14px;
+    color:var(--text);
+  }
+
+  .details-empty{
+    font-size:13px;
+    color:var(--muted);
+  }
+
+  @media (max-width:1024px){
+    .layout{
+      flex-direction:column;
+    }
+    .layout-side .card{
+      position:static;
+    }
+  }
+
+  @media (max-width:768px){
+    .page-header{
+      flex-direction:column;
+      align-items:flex-start;
+    }
+    .page-meta{
+      text-align:left;
+    }
+    .toolbar{
+      align-items:stretch;
+    }
+    .toolbar-right{
+      width:100%;
+      justify-content:flex-end;
+    }
+  }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="card">
-      <div class="toolbar">
-        <input id="q" class="input" placeholder="Buscar por Nº Pedido, Cliente ou Fornecedor…" />
-        <button id="buscar" class="btn">Buscar</button>
-        <button id="atualizar" class="btn">Atualizar</button>
-        <span id="status" class="muted">status: pronto</span>
+    <header class="page-header">
+      <div>
+        <div class="page-title">
+          Pedidos agrupados
+          <span class="page-title-pill">Visão por Nº do pedido</span>
+        </div>
+        <p class="page-subtitle">
+          Visualize rapidamente o total por pedido, cliente e fornecedor. Clique em uma linha para ver detalhes à direita
+          e em <strong>Detalhar</strong> para abrir o gerenciamento completo.
+        </p>
       </div>
+      <div class="page-meta">
+        <div>Gestão de compras & fornecedores</div>
+        <div style="opacity:.7;">Painel sintético de pedidos</div>
+      </div>
+    </header>
 
-      <div class="table-wrap">
-        <table id="tabela">
-          <thead>
-            <tr>
-              <th>Nº Pedido</th>
-              <th>Cliente</th>
-              <th>Fornecedor</th>
-              <th>Itens</th>
-              <th class="right">Total</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody><!-- linhas --></tbody>
-        </table>
-      </div>
+    <div class="layout">
+      <!-- COLUNA ESQUERDA: TABELA -->
+      <section class="card layout-main">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="field-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15.5 14h-.79l-.28-.27a6.471 6.471 0 0 0 1.57-4.23 6.5 6.5 0 1 0-6.5 6.5 6.471 6.471 0 0 0 4.23-1.57l.27.28v.79L19 20.49 20.49 19 15.5 14Z M10.5 14C8.01 14 6 11.99 6 9.5S8.01 5 10.5 5 15 7.01 15 9.5 12.99 14 10.5 14Z"/>
+              </svg>
+              <input id="q" class="input" placeholder="Buscar por Nº do pedido, cliente ou fornecedor…" />
+            </div>
+
+            <button id="buscar" class="btn">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 4h14a1 1 0 0 1 .96 1.27l-2 7A1 1 0 0 1 17 13H7a1 1 0 0 1-.96-.73L4.05 5.54A1 1 0 0 1 5 4Zm2.32 8h9.36l1.43-5H5.89l1.43 5ZM8 16.5A1.5 1.5 0 1 1 6.5 18 1.5 1.5 0 0 1 8 16.5Zm9 0A1.5 1.5 0 1 1 15.5 18 1.5 1.5 0 0 1 17 16.5Z"/>
+              </svg>
+              Buscar
+            </button>
+
+            <button id="atualizar" class="btn">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5V2L8 6l4 4V7a5 5 0 0 1 5 5 5 5 0 0 1-8.54 3.54l-1.42 1.42A7 7 0 0 0 19 12a7 7 0 0 0-7-7Zm-5 5a5 5 0 0 1 8.54-3.54l1.42-1.42A7 7 0 0 0 5 10a7 7 0 0 0 7 7v3l4-4-4-4v3a5 5 0 0 1-5-5Z"/>
+              </svg>
+              Atualizar
+            </button>
+          </div>
+
+          <div class="toolbar-right">
+            <span class="muted">
+              <span id="status-dot" class="status-dot"></span>
+              <span id="status">status: pronto</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="tabela">
+            <thead>
+              <tr>
+                <th style="width:110px;">Nº Pedido</th>
+                <th>Cliente</th>
+                <th>Fornecedor</th>
+                <th class="center" style="width:110px;">Itens</th>
+                <th class="right" style="width:150px;">Total</th>
+                <th class="center" style="width:130px;">Ações</th>
+              </tr>
+            </thead>
+            <tbody><!-- linhas --></tbody>
+          </table>
+        </div>
+
+        <div id="empty-state" class="empty-state" style="display:none;">
+          Nenhum pedido encontrado para os filtros atuais.
+        </div>
+      </section>
+
+      <!-- COLUNA DIREITA: DETALHES DO PEDIDO -->
+      <aside class="layout-side">
+        <section class="card">
+          <div id="detalhes-pedido">
+            <p class="details-empty">
+              Selecione um pedido na lista à esquerda para ver os detalhes aqui.
+            </p>
+          </div>
+        </section>
+      </aside>
     </div>
   </div>
 
 <script>
 const BASE_URL = 'http://localhost:3000';
 const $ = (s,root=document)=>root.querySelector(s);
-const setStatus = t => { const el=$('#status'); if(el) el.textContent='status: '+t; };
+
+const setStatus = t => {
+  const el = $('#status');
+  const dot = $('#status-dot');
+  if (el) el.textContent = 'status: ' + t;
+  if (!dot) return;
+  dot.classList.remove('loading','error');
+  if (/carregando|processando/i.test(t)) dot.classList.add('loading');
+  else if (/erro/i.test(t)) dot.classList.add('error');
+};
+
 const fmtBRL = n => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0));
-const fmtData = v => { if(!v) return ''; const d=new Date(v); if(isNaN(d)) return String(v); return d.toLocaleDateString('pt-BR'); };
 
 async function listar(q=''){
   setStatus('carregando…');
   const url = new URL(BASE_URL + '/api/produtos');
   url.searchParams.set('limit','2000');
   if(q) url.searchParams.set('q', q);
-  const r = await fetch(url);
-  const j = await r.json();
-  if(!j.ok) { setStatus('erro'); alert(j.error||'Falha ao listar'); return; }
-  setStatus('processando…');
-  desenhar(agruparPorPedido(j.data||[]));
-  setStatus(`ok — ${Object.keys(agruparPorPedido(j.data||[])).length} pedido(s)`);
+
+  try{
+    const r = await fetch(url);
+    const j = await r.json();
+    if(!j.ok){
+      setStatus('erro ao listar');
+      alert(j.error || 'Falha ao listar');
+      return;
+    }
+    setStatus('processando…');
+    const groups = agruparPorPedido(j.data || []);
+    desenhar(groups);
+    const qtd = Object.keys(groups).length;
+    setStatus(`ok — ${qtd} pedido(s)`);
+  }catch(err){
+    console.error(err);
+    setStatus('erro na comunicação');
+    alert('Erro ao comunicar com o servidor.');
+  }
 }
 
 function agruparPorPedido(docs){
-  // Agrupa por numeroPedido. Em cada grupo, soma valorReal e pega cliente/fornecedor do 1º.
   const map = new Map();
   for (const d of docs){
     const key = String(d.numeroPedido||'').trim();
     if(!key) continue;
     if(!map.has(key)){
-      map.set(key, { numeroPedido: key, cliente: d.cliente||'-', fornecedor: d.fornecedor||'-', itens: [], total: 0 });
+      map.set(key, {
+        numeroPedido: key,
+        cliente: d.cliente || '-',
+        fornecedor: d.fornecedor || '-',
+        itens: [],
+        total: 0
+      });
     }
     const g = map.get(key);
     g.itens.push(d);
@@ -90,27 +630,147 @@ function agruparPorPedido(docs){
   return Object.fromEntries(map.entries());
 }
 
-function desenhar(groups){
-  const tbody = $('#tabela tbody'); tbody.innerHTML='';
-  const frag = document.createDocumentFragment();
-  Object.values(groups).forEach(g=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${g.numeroPedido}</td>
-      <td>${g.cliente}</td>
-      <td>${g.fornecedor}</td>
-      <td>${g.itens.length}</td>
-      <td class="right">${fmtBRL(g.total)}</td>
-      <td><button class="btn primary" data-view>Visualizar</button></td>
+function mostrarDetalhesPedido(g){
+  const cont = $('#detalhes-pedido');
+  if (!cont) return;
+
+  const totalItens = g.itens.length;
+  const totalValor = fmtBRL(g.total);
+
+  const itensPreview = g.itens.slice(0,5).map((item,idx)=>{
+    const desc = item.descricao || item.nome || item.produto || 'Item sem descrição';
+    const qtd  = item.quantidade || item.qtd || 1;
+    const valor = fmtBRL(item.valorReal || item.valor || 0);
+    return `
+      <li>
+        <div class="items-main">
+          ${idx+1}. ${desc}
+          <div class="items-secondary">
+            Qtd: ${qtd} • ${item.categoria || item.grupo || 'Produto'}
+          </div>
+        </div>
+        <div class="items-price mono">${valor}</div>
+      </li>
     `;
-    tr.querySelector('[data-view]').onclick = () => {
-      // abre página de gerenciamento
+  }).join('');
+
+  const restante = totalItens > 5
+    ? `<li class="more-items">+ ${totalItens-5} item(s) adicionais neste pedido…</li>`
+    : '';
+
+  cont.innerHTML = `
+    <div class="details-title">
+      Pedido #${g.numeroPedido}
+      <span class="details-badge">${totalItens} item(s)</span>
+    </div>
+    <div class="details-meta">
+      Cliente <strong>${g.cliente}</strong><br>
+      Fornecedor <strong>${g.fornecedor}</strong>
+    </div>
+
+    <div class="details-chips">
+      <div class="details-chip">
+        <span>Cliente</span> ${g.cliente}
+      </div>
+      <div class="details-chip">
+        <span>Fornecedor</span> ${g.fornecedor}
+      </div>
+    </div>
+
+    <ul class="items-list">
+      ${itensPreview || '<li><span class="items-secondary">Nenhum item cadastrado para este pedido.</span></li>'}
+      ${restante}
+    </ul>
+
+    <div class="details-footer">
+      <div class="details-stat">
+        Valor total do pedido
+        <strong class="mono">${totalValor}</strong>
+      </div>
+      <button class="btn primary" data-open-full>
+        Abrir pedido completo
+      </button>
+    </div>
+  `;
+
+  const btnAbrir = cont.querySelector('[data-open-full]');
+  if (btnAbrir){
+    btnAbrir.onclick = () => {
       const url = new URL(window.location.origin + '/gerenciar.html');
       url.searchParams.set('pedido', g.numeroPedido);
       window.location.href = url.toString();
     };
+  }
+}
+
+function desenhar(groups){
+  const tbody = $('#tabela tbody');
+  const emptyState = $('#empty-state');
+  tbody.innerHTML = '';
+
+  const values = Object.values(groups);
+  if (!values.length){
+    if (emptyState) emptyState.style.display = 'block';
+    const cont = $('#detalhes-pedido');
+    if (cont){
+      cont.innerHTML = '<p class="details-empty">Nenhum pedido encontrado. Ajuste os filtros de busca.</p>';
+    }
+    return;
+  } else if (emptyState){
+    emptyState.style.display = 'none';
+  }
+
+  const frag = document.createDocumentFragment();
+
+  values.forEach((g, idx)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${g.numeroPedido}</td>
+      <td>
+        <div>${g.cliente}</div>
+      </td>
+      <td>
+        <span class="tag-pill">
+          Fornecedor
+          <span>${g.fornecedor}</span>
+        </span>
+      </td>
+      <td class="center">
+        <span class="pill-count">${g.itens.length}</span>
+      </td>
+      <td class="right mono">${fmtBRL(g.total)}</td>
+      <td class="center actions-cell">
+        <button class="btn primary" data-view>
+          Detalhar
+        </button>
+      </td>
+    `;
+
+    // clique na linha = mostra detalhes na direita
+    tr.addEventListener('click', (e)=>{
+      if (e.target.closest('button')) return; // deixa o botão agir separado
+      tbody.querySelectorAll('tr').forEach(row=> row.classList.remove('is-selected'));
+      tr.classList.add('is-selected');
+      mostrarDetalhesPedido(g);
+    });
+
+    // botão para abrir página de gerenciamento
+    tr.querySelector('[data-view]').onclick = (e) => {
+      e.stopPropagation();
+      const url = new URL(window.location.origin + '/gerenciar.html');
+      url.searchParams.set('pedido', g.numeroPedido);
+      window.location.href = url.toString();
+    };
+
+    // seleciona o primeiro por padrão
+    if (idx === 0){
+      tr.classList.add('is-selected');
+      mostrarDetalhesPedido(g);
+    }
+
     frag.appendChild(tr);
   });
+
   tbody.appendChild(frag);
 }
 
