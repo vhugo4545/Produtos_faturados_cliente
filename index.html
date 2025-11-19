@@ -569,6 +569,8 @@
 
 <script>
 const BASE_URL = 'https://ulhoa-vidros-1ae0adcf5f73.herokuapp.com';
+const REPO_BASE = '/Produtos_faturados_cliente/'; // base do GitHub Pages
+
 const $ = (s,root=document)=>root.querySelector(s);
 
 const setStatus = t => {
@@ -696,8 +698,8 @@ function mostrarDetalhesPedido(g){
   const btnAbrir = cont.querySelector('[data-open-full]');
   if (btnAbrir){
     btnAbrir.onclick = () => {
-      // gerenciar.html no MESMO diretório desta página
-      const url = new URL('gerenciar.html', window.location.href);
+      // /Produtos_faturados_cliente/gerenciar.html?pedido=...
+      const url = new URL(REPO_BASE + 'gerenciar.html', window.location.origin);
       url.searchParams.set('pedido', g.numeroPedido);
       window.location.href = url.toString();
     };
@@ -758,7 +760,7 @@ function desenhar(groups){
     // botão para abrir página de gerenciamento
     tr.querySelector('[data-view]').onclick = (e) => {
       e.stopPropagation();
-      const url = new URL('gerenciar.html', window.location.href);
+      const url = new URL(REPO_BASE + 'gerenciar.html', window.location.origin);
       url.searchParams.set('pedido', g.numeroPedido);
       window.location.href = url.toString();
     };
