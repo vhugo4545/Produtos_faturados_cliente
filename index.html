@@ -696,7 +696,7 @@ function mostrarDetalhesPedido(g){
   const btnAbrir = cont.querySelector('[data-open-full]');
   if (btnAbrir){
     btnAbrir.onclick = () => {
-      const url = new URL(window.location.origin + '/gerenciar.html');
+      const url = new URL(window.location.origin + 'Produtos_faturados_cliente/gerenciar.html');
       url.searchParams.set('pedido', g.numeroPedido);
       window.location.href = url.toString();
     };
