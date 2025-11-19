@@ -693,14 +693,16 @@ function mostrarDetalhesPedido(g){
     </div>
   `;
 
-  const btnAbrir = cont.querySelector('[data-open-full]');
-  if (btnAbrir){
-    btnAbrir.onclick = () => {
-      const url = new URL(window.location.origin + 'Produtos_faturados_cliente/gerenciar.html');
-      url.searchParams.set('pedido', g.numeroPedido);
-      window.location.href = url.toString();
-    };
-  }
+const btnAbrir = cont.querySelector('[data-open-full]');
+if (btnAbrir){
+  btnAbrir.onclick = () => {
+    // gerenciar.html no MESMO diretório desta página
+    const url = new URL('gerenciar.html', window.location.href);
+    url.searchParams.set('pedido', g.numeroPedido);
+    window.location.href = url.toString();
+  };
+}
+
 }
 
 function desenhar(groups){
