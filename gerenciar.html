@@ -79,6 +79,11 @@
     color:#fff;
     border-color:var(--primary);
   }
+  .btn-icon{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+  }
   .btn:hover{filter:brightness(0.97)}
   .muted{color:var(--muted);font-size:13px}
 
@@ -137,7 +142,7 @@
     width:100%;
     border-collapse:separate;
     border-spacing:0;
-    min-width:1100px;
+    min-width:1150px;
     font-size:12px;
   }
   thead th{
@@ -195,6 +200,15 @@
   @media (max-width: 960px){
     .two-cols{grid-template-columns:1fr}
   }
+
+  .btn-danger{
+    border-color:#fecaca;
+    color:#b91c1c;
+    background:#fef2f2;
+  }
+  .btn-danger:hover{
+    background:#fee2e2;
+  }
 </style>
 </head>
 <body>
@@ -207,6 +221,7 @@
         <span id="status" class="muted">status: pronto</span>
       </div>
       <div class="toolbar-right">
+        <button id="btn-add-item" class="btn btn-icon">+ Incluir item</button>
         <button id="btn-salvar" class="btn btn-primary">Salvar alterações</button>
       </div>
     </div>
@@ -281,6 +296,7 @@
             <th>Na empresa</th>
             <th>Faturamento</th>
             <th class="right">Valor Real</th>
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody><!-- linhas --></tbody>
@@ -288,6 +304,7 @@
           <tr>
             <td colspan="14" class="right">Valor Real (total)</td>
             <td class="right" id="tfoot-total">R$ 0,00</td>
+            <td></td>
           </tr>
         </tfoot>
       </table>
@@ -347,6 +364,8 @@ function moneyToNumber(str){
 
 // Estado
 let itens = [];
+let itensRemovidosIds = new Set();
+
 let cabecalho = {
   numeroPedido: '',
   cliente: '',
@@ -372,6 +391,12 @@ $('#voltar').onclick = ()=> window.history.length>1 ? history.back() : (window.l
 function getPedidoParam(){
   const u = new URL(window.location.href);
   return u.searchParams.get('pedido') || '';
+}
+
+// helper para ignorar produto "Mão de Obra..."
+function isMaoDeObraHora(doc){
+  const nome = (doc.vidro || doc.descricao || doc.produto || '').trim();
+  return nome === 'Mão de Obra de Instalação (por Hora)';
 }
 
 // Renderização da tabela
@@ -419,8 +444,19 @@ function renderTabela(){
     tr.appendChild(td(date(i.naEmpresa)));                     tr.lastChild.setAttribute('data-k','naEmpresa');
     tr.appendChild(td(fatur(i.faturamento||'Ferreira Ulhoa')));tr.lastChild.setAttribute('data-k','faturamento');
     tr.appendChild(td(money(i.valorReal||0)));                 tr.lastChild.setAttribute('data-k','valorReal');
+
+    // Ações (remover)
+    const tdAcoes = document.createElement('td');
+    tdAcoes.innerHTML = `
+      <button type="button" class="btn btn-danger btn-icon" data-remove>
+        ✕ Remover
+      </button>
+    `;
+    tr.appendChild(tdAcoes);
+
     tbody.appendChild(tr);
 
+    // listeners de edição
     tr.querySelectorAll('td').forEach(td=>{
       const k = td.getAttribute('data-k');
       const inp = td.querySelector('input, select');
@@ -453,11 +489,31 @@ function renderTabela(){
         inp.addEventListener('change', ()=>{ itens[idx][k] = inp.value; });
       }
     });
+
+    // botão remover
+    const btnRem = tr.querySelector('[data-remove]');
+    if(btnRem){
+      btnRem.addEventListener('click', ()=>{
+        const removed = itens[idx];
+        if(removed && removed._id){
+          itensRemovidosIds.add(removed._id);
+        }
+        itens.splice(idx,1);
+        renderTabela();
+        recalcular();
+        atualizarPrevisaoCabecalho();
+      });
+    }
   });
 
   $('#t-itens').textContent = itens.length;
   $('#t-valor-real-total').textContent = fmtBRL(totalReal);
-  $('#tfoot-total').textContent = fmtBRL(totalReal);
+  $('#tfoot-total').textContent       = fmtBRL(totalReal);
+
+  const vtNFServicos  = Number(totaisSistema.valorNFServicos||0);
+  const vtDireto      = Number(totaisSistema.valorFaturamentoDiretoOrcado||0);
+  const difServ = (vtDireto + vtNFServicos) - totalReal;
+  $('#t-dif-fatur-serv').textContent = fmtBRL(difServ);
 }
 
 function atualizarPrevisaoCabecalho(){
@@ -499,9 +555,14 @@ async function carregar(){
     if(!j.ok){ setStatus('erro'); alert(j.error||'Falha ao carregar pedido'); return; }
 
     const todos = Array.isArray(j.data) ? j.data : [];
-    itens = todos.filter(d => String(d.numeroPedido || '') === String(numeroPedido));
+    const numeroPedidoStr = String(numeroPedido);
 
-    const first = itens[0] || {};
+    // filtra pelo nº do pedido E remove "Mão de Obra de Instalação (por Hora)"
+    itens = todos
+      .filter(d => String(d.numeroPedido || '') === numeroPedidoStr)
+      .filter(d => !isMaoDeObraHora(d));
+
+    const first = itens[0] || todos.find(d => String(d.numeroPedido||'')===numeroPedidoStr) || {};
     cabecalho.numeroPedido = numeroPedido;
     cabecalho.cliente      = first.cliente   || '';
     cabecalho.fornecedor   = first.fornecedor|| '';
@@ -547,39 +608,103 @@ $('#p-observacao-input').addEventListener('input', e=>{ cabecalho.observacao = e
 $('#nf-numero').addEventListener('input', e=>{ cabecalho.numeroNF = e.target.value; });
 $('#forma-pag').addEventListener('change', e=>{ cabecalho.formaPagamento = e.target.value; });
 
+// ===== INCLUIR NOVO ITEM =====
+document.getElementById('btn-add-item')?.addEventListener('click', ()=>{
+  const numeroPedido = cabecalho.numeroPedido || getPedidoParam();
+  const novo = {
+    numeroPedido,
+    cliente: cabecalho.cliente,
+    fornecedor: cabecalho.fornecedor,
+    vendedor: cabecalho.vendedor,
+    vidro: '',
+    tipo: 'Reto',
+    quantidade: 0,
+    orcamentoEnviado: '',
+    aprovacao: '',
+    moldeEnviado: '',
+    recebemosLinkPagamento: '',
+    pagamento: '',
+    previsao: '',
+    numeroPedidoFornecedor: '',
+    numeroOrcFornecedor: '',
+    vidrosProntos: '',
+    naEmpresa: '',
+    faturamento: 'Ferreira Ulhoa',
+    valorReal: 0
+  };
+  itens.push(novo);
+  renderTabela();
+  recalcular();
+  atualizarPrevisaoCabecalho();
+});
+
 // ===== SALVAR ALTERAÇÕES =====
 async function salvarAlteracoes(){
-  if(!Array.isArray(itens) || !itens.length){
+  if(!Array.isArray(itens)){
     alert('Nenhum item para salvar.');
     return;
   }
   setStatus('salvando…');
   try{
     let okCount = 0;
-    for(const it of itens){
-      if(!it._id) continue;
 
+    // 1) Deletar itens removidos
+    for (const id of itensRemovidosIds){
+      try{
+        await fetch(`${BASE_URL}/api/produtos/${id}`, {
+          method:'DELETE'
+        });
+      }catch(e){
+        console.warn('Erro ao deletar item', id, e);
+      }
+    }
+    itensRemovidosIds.clear();
+
+    // 2) Salvar / atualizar itens atuais
+    for(const it of itens){
       const {_id, createdAt, updatedAt, __v, ...rest} = it;
       const clone = { ...rest };
+
+      // garante infos de cabeçalho
+      clone.numeroPedido = cabecalho.numeroPedido || clone.numeroPedido;
+      clone.cliente      = cabecalho.cliente      || clone.cliente;
+      clone.fornecedor   = cabecalho.fornecedor   || clone.fornecedor;
+      clone.vendedor     = cabecalho.vendedor     || clone.vendedor;
 
       clone.observacao      = cabecalho.observacao ?? clone.observacao;
       clone.numeroNotaFiscal= cabecalho.numeroNF ?? clone.numeroNotaFiscal;
       clone.formaPagamento  = cabecalho.formaPagamento ?? clone.formaPagamento;
-      clone.fornecedor      = cabecalho.fornecedor ?? clone.fornecedor;
 
       clone.meta = { ...(clone.meta || {}) };
       if(cabecalho.telefoneFornecedor) clone.meta.telefoneFornecedor = cabecalho.telefoneFornecedor;
       if(cabecalho.emailFornecedor)    clone.meta.emailFornecedor    = cabecalho.emailFornecedor;
       if(cabecalho.codigoFornecedorOmie) clone.meta.codigoFornecedorOmie = cabecalho.codigoFornecedorOmie;
 
-      const r = await fetch(`${BASE_URL}/api/produtos/${it._id}`, {
-        method:'PUT',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(clone)
-      });
-      const j = await r.json();
-      if(j.ok) okCount++;
+      // se tiver _id -> PUT (update), se não -> POST (novo)
+      if(_id){
+        const r = await fetch(`${BASE_URL}/api/produtos/${_id}`, {
+          method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(clone)
+        });
+        const j = await r.json();
+        if(j.ok) okCount++;
+      }else{
+        const r = await fetch(`${BASE_URL}/api/produtos`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(clone)
+        });
+        const j = await r.json();
+        if(j.ok){
+          okCount++;
+          if(j.data && j.data._id){
+            it._id = j.data._id; // atualiza no array local
+          }
+        }
+      }
     }
+
     alert(`✅ ${okCount} item(ns) salvo(s) com sucesso.`);
     setStatus('ok');
   }catch(err){

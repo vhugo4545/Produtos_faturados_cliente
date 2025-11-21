@@ -237,6 +237,8 @@ const OMIE_URL = "https://app.omie.com.br/api/v1/financas/contapagar/";
 
 app.post("/api/omie/comissao", async (req, res) => {
   try {
+    console.log("📥 [COMISSAO] Requisição recebida em /api/omie/comissao");
+
     const {
       valor_documento,
       data_vencimento,
@@ -251,7 +253,20 @@ app.post("/api/omie/comissao", async (req, res) => {
       tipo_comissao,
     } = req.body || {};
 
-    // validações
+    // Log de entrada (parcial pra não poluir)
+    console.log("🔎 [COMISSAO] Body recebido (resumo):", {
+      valor_documento,
+      data_vencimento,
+      data_previsao,
+      codigo_cliente_fornecedor,
+      catFromBody,
+      tipo,
+      papel,
+      tipo_comissao,
+      observacao_preview: observacao?.slice(0, 80) || null,
+    });
+
+    // ================== validações ==================
     const erros = [];
     if (valor_documento == null) erros.push("valor_documento");
     if (!data_vencimento) erros.push("data_vencimento");
@@ -259,17 +274,24 @@ app.post("/api/omie/comissao", async (req, res) => {
     if (!codigo_cliente_fornecedor) erros.push("codigo_cliente_fornecedor");
 
     if (erros.length) {
+      console.warn("⚠️ [COMISSAO] Requisição inválida, campos ausentes:", erros);
       return res.status(400).json({
         ok: false,
         error: `Campos obrigatórios ausentes: ${erros.join(", ")}.`
       });
     }
 
-    // ---------- categoria dinâmica ----------
+    // =============== categoria dinâmica ===============
     let codigo_categoria = catFromBody; // prioridade ao que veio no body
+
     if (!codigo_categoria) {
       const hint = String(tipo || papel || tipo_comissao || "").toLowerCase();
       const obs  = String(observacao || "").toLowerCase();
+
+      console.log("🧩 [COMISSAO] Inferindo categoria com base em hint/obs:", {
+        hint,
+        obs_preview: obs.slice(0, 80),
+      });
 
       if (hint.includes("arquit") || obs.includes("arquit")) {
         codigo_categoria = "2.08.02"; // arquiteto
@@ -280,7 +302,9 @@ app.post("/api/omie/comissao", async (req, res) => {
         codigo_categoria = "2.07.99";
       }
     }
-    // ---------------------------------------
+
+    console.log("✅ [COMISSAO] Categoria final definida:", codigo_categoria);
+    // =================================================
 
     const payload = {
       call: "IncluirContaPagar",
@@ -295,10 +319,20 @@ app.post("/api/omie/comissao", async (req, res) => {
           valor_documento: Number(valor_documento),
           data_vencimento: toBRDate(data_vencimento),
           data_previsao: toBRDate(data_previsao),
-          observacao: (observacao ?? "Lançamento de comissão via API")  // do front se vier
+          observacao: (observacao ?? "Lançamento de comissão via API")
         }
       ]
     };
+
+    console.log("📦 [COMISSAO] Payload preparado para Omie (resumo):", {
+      codigo_cliente_fornecedor,
+      codigo_categoria,
+      id_conta_corrente,
+      valor_documento: Number(valor_documento),
+      data_vencimento: toBRDate(data_vencimento),
+      data_previsao: toBRDate(data_previsao),
+      observacao_preview: (observacao ?? "Lançamento de comissão via API").slice(0, 80),
+    });
 
     const r = await fetch(OMIE_URL, {
       method: "POST",
@@ -307,9 +341,30 @@ app.post("/api/omie/comissao", async (req, res) => {
     });
 
     const omie = await r.json();
+
+    if (!r.ok) {
+      console.error("❌ [COMISSAO] Erro na resposta da Omie:", {
+        status: r.status,
+        statusText: r.statusText,
+        resposta: omie
+      });
+    } else {
+      console.log("📤 [COMISSAO] Comissão enviada com sucesso para Omie:", {
+        status: r.status,
+        resposta_resumo: {
+          codStatus: omie?.codStatus,
+          descricaoStatus: omie?.descricaoStatus,
+          faultstring: omie?.faultstring,
+        }
+      });
+    }
+
     res.json({ ok: true, omie });
   } catch (err) {
-    console.error("POST /api/omie/comissao error:", err);
+    console.error("💥 [COMISSAO] Erro inesperado em POST /api/omie/comissao:", {
+      message: err?.message,
+      stack: err?.stack,
+    });
     res.status(500).json({ ok: false, error: "Falha ao enviar comissão para Omie." });
   }
 });
