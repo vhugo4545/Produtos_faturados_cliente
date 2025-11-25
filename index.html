@@ -163,9 +163,9 @@
     border:1px solid var(--border);
     background:#f9fafb;
     border-radius:999px;
-    padding:8px 14px;
+    padding:6px 12px;
     font-weight:600;
-    font-size:13px;
+    font-size:12px;
     cursor:pointer;
     display:inline-flex;
     align-items:center;
@@ -199,6 +199,15 @@
 
   .btn.primary:hover{
     background:#1d4ed8;
+  }
+
+  .btn-danger{
+    border-color:#fecaca;
+    color:#b91c1c;
+    background:#fef2f2;
+  }
+  .btn-danger:hover{
+    background:#fee2e2;
   }
 
   .toolbar-right{
@@ -330,10 +339,10 @@
     font-size:11px;
   }
 
-  .actions-cell .btn{
-    padding:6px 12px;
-    font-size:12px;
-    border-radius:999px;
+  .actions-cell{
+    display:flex;
+    justify-content:center;
+    gap:6px;
   }
 
   .empty-state{
@@ -542,7 +551,7 @@
                 <th>Fornecedor</th>
                 <th class="center" style="width:110px;">Itens</th>
                 <th class="right" style="width:150px;">Total</th>
-                <th class="center" style="width:130px;">Ações</th>
+                <th class="center" style="width:180px;">Ações</th>
               </tr>
             </thead>
             <tbody><!-- linhas --></tbody>
@@ -626,7 +635,7 @@ function agruparPorPedido(docs){
       });
     }
     const g = map.get(key);
-    g.itens.push(d);
+    g.itens.push(d); // mantém _id de cada item para exclusão
     g.total += Number(d.valorReal || 0);
   }
   return Object.fromEntries(map.entries());
@@ -640,7 +649,7 @@ function mostrarDetalhesPedido(g){
   const totalValor = fmtBRL(g.total);
 
   const itensPreview = g.itens.slice(0,5).map((item,idx)=>{
-    const desc = item.descricao || item.nome || item.produto || 'Item sem descrição';
+    const desc = item.vidro || item.descricao || item.nome || item.produto || 'Item sem descrição';
     const qtd  = item.quantidade || item.qtd || 1;
     const valor = fmtBRL(item.valorReal || item.valor || 0);
     return `
@@ -698,12 +707,59 @@ function mostrarDetalhesPedido(g){
   const btnAbrir = cont.querySelector('[data-open-full]');
   if (btnAbrir){
     btnAbrir.onclick = () => {
-      // /Produtos_faturados_cliente/gerenciar.html?pedido=...
       const url = new URL(REPO_BASE + 'gerenciar.html', window.location.origin);
       url.searchParams.set('pedido', g.numeroPedido);
       window.location.href = url.toString();
     };
   }
+}
+
+// 🔴 excluir TODOS os itens de um pedido
+async function excluirPedido(g){
+  if (!g || !Array.isArray(g.itens) || !g.itens.length) {
+    alert('Nenhum item encontrado para este pedido.');
+    return;
+  }
+
+  const confirma = confirm(
+    `Tem certeza que deseja excluir DEFINITIVAMENTE o pedido ${g.numeroPedido}?\n` +
+    `Serão removidos ${g.itens.length} item(ns) da base.`
+  );
+  if (!confirma) return;
+
+  setStatus('excluindo pedido…');
+
+  let removidos = 0;
+  let falhas = 0;
+
+  for (const item of g.itens){
+    if (!item._id) continue;
+    try{
+      const r = await fetch(`${BASE_URL}/api/produtos/${item._id}`, {
+        method:'DELETE'
+      });
+      let j = {};
+      try{ j = await r.json(); }catch(e){}
+      if (r.ok && (j.ok === undefined || j.ok)){
+        removidos++;
+      } else {
+        falhas++;
+      }
+    }catch(err){
+      console.error('Erro ao excluir item', item._id, err);
+      falhas++;
+    }
+  }
+
+  alert(
+    `Pedido ${g.numeroPedido} excluído.\n` +
+    `Itens removidos: ${removidos}` +
+    (falhas ? `\nFalhas ao remover: ${falhas}` : '')
+  );
+
+  // Recarrega lista com o filtro atual
+  await listar($('#q').value.trim());
+  setStatus('ok');
 }
 
 function desenhar(groups){
@@ -743,9 +799,8 @@ function desenhar(groups){
       </td>
       <td class="right mono">${fmtBRL(g.total)}</td>
       <td class="center actions-cell">
-        <button class="btn primary" data-view>
-          Detalhar
-        </button>
+        <button class="btn primary" data-view>Detalhar</button>
+        <button class="btn btn-danger" data-delete>Excluir</button>
       </td>
     `;
 
@@ -764,6 +819,15 @@ function desenhar(groups){
       url.searchParams.set('pedido', g.numeroPedido);
       window.location.href = url.toString();
     };
+
+    // botão para excluir pedido
+    const btnDel = tr.querySelector('[data-delete]');
+    if (btnDel){
+      btnDel.onclick = (e)=>{
+        e.stopPropagation();
+        excluirPedido(g);
+      };
+    }
 
     // seleciona o primeiro por padrão
     if (idx === 0){

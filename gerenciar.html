@@ -378,11 +378,14 @@ let cabecalho = {
   emailFornecedor: '',
   codigoFornecedorOmie: ''
 };
+
 let totaisSistema = {
   valorTotalPedido: 0,
   valorFaturamentoDiretoOrcado: 0,
+  valorAproximadoUF: 0,
   valorNFProdutos: 0,
-  valorNFServicos: 0
+  valorNFServicos: 0,
+  residuoDiferencaFaturamentoServico: 0
 };
 
 // Navegação
@@ -465,7 +468,7 @@ function renderTabela(){
       if(inp.tagName==='SELECT' && inp.dataset.free === '1'){
         inp.addEventListener('change', ()=>{
           itens[idx][k] = inp.value;
-          recalcular();
+          // não mexe nos totais do card (vem do server)
         });
       }else if(inp.type==='date'){
         inp.addEventListener('change', ()=>{
@@ -481,7 +484,7 @@ function renderTabela(){
           const n = moneyToNumber(inp.value);
           itens[idx][k] = n;
           inp.value = fmtBRL(n);
-          recalcular();
+          recalcularTotaisLocais();
         });
         inp.addEventListener('blur', ()=>{ inp.value = fmtBRL(moneyToNumber(inp.value)); });
         inp.addEventListener('focus', ()=> inp.select());
@@ -500,43 +503,31 @@ function renderTabela(){
         }
         itens.splice(idx,1);
         renderTabela();
-        recalcular();
+        recalcularTotaisLocais();
         atualizarPrevisaoCabecalho();
       });
     }
   });
 
   $('#t-itens').textContent = itens.length;
-  $('#t-valor-real-total').textContent = fmtBRL(totalReal);
-  $('#tfoot-total').textContent       = fmtBRL(totalReal);
 
-  const vtNFServicos  = Number(totaisSistema.valorNFServicos||0);
-  const vtDireto      = Number(totaisSistema.valorFaturamentoDiretoOrcado||0);
-  const difServ = (vtDireto + vtNFServicos) - totalReal;
-  $('#t-dif-fatur-serv').textContent = fmtBRL(difServ);
+  // total local (grade)
+  $('#tfoot-total').textContent       = fmtBRL(totalReal);
+  // Valor real (total) na caixa também reflete a soma atual dos itens
+  $('#t-valor-real-total').textContent = fmtBRL(totalReal);
+}
+
+// só recalcula os totais locais quando mexe em valorReal, sem mexer nos campos do server
+function recalcularTotaisLocais(){
+  const totalReal = itens.reduce((acc,i)=> acc + Number(i.valorReal||0), 0);
+  $('#tfoot-total').textContent       = fmtBRL(totalReal);
+  $('#t-valor-real-total').textContent = fmtBRL(totalReal);
 }
 
 function atualizarPrevisaoCabecalho(){
   const previsoes = itens.map(i=>i.previsao).filter(Boolean).map(v=>new Date(v)).filter(d=>!isNaN(d));
   const prevMax = previsoes.length ? new Date(Math.max(...previsoes)) : null;
   $('#p-previsao').textContent = prevMax ? new Date(prevMax).toLocaleDateString('pt-BR') : '—';
-}
-
-function recalcular(){
-  const totalReal = itens.reduce((acc,i)=> acc + Number(i.valorReal||0), 0);
-  $('#t-valor-real-total').textContent = fmtBRL(totalReal);
-  $('#tfoot-total').textContent       = fmtBRL(totalReal);
-
-  const vtPedido      = Number(totaisSistema.valorTotalPedido||0);
-  const vtDireto      = Number(totaisSistema.valorFaturamentoDiretoOrcado||0);
-  const vtNFProdutos  = Number(totaisSistema.valorNFProdutos||0);
-  const vtNFServicos  = Number(totaisSistema.valorNFServicos||0);
-
-  const valorUF = vtPedido - vtDireto;
-  $('#t-valor-uf').textContent = fmtBRL(valorUF);
-
-  const difServ = (vtDireto + vtNFServicos) - totalReal;
-  $('#t-dif-fatur-serv').textContent = fmtBRL(difServ);
 }
 
 async function carregar(){
@@ -580,19 +571,23 @@ async function carregar(){
     $('#nf-numero').value    = cabecalho.numeroNF;
     $('#forma-pag').value    = cabecalho.formaPagamento;
 
-    totaisSistema.valorTotalPedido              = Number(first.valorTotalPedido||0);
-    totaisSistema.valorFaturamentoDiretoOrcado  = Number(first.valorTotalFaturamentoDiretoOrcado||0);
-    totaisSistema.valorNFProdutos               = Number(first.valorTotalNFProdutos||0);
-    totaisSistema.valorNFServicos               = Number(first.valorTotalNFServicos||0);
+    // Totais vindos do SERVER
+    totaisSistema.valorTotalPedido             = Number(first.valorTotalPedido||0);
+    totaisSistema.valorFaturamentoDiretoOrcado = Number(first.valorTotalFaturamentoDiretoOrcado||0);
+    totaisSistema.valorAproximadoUF            = Number(first.valorAproximadoUF||0);
+    totaisSistema.valorNFProdutos              = Number(first.valorTotalNFProdutos||0);
+    totaisSistema.valorNFServicos              = Number(first.valorTotalNFServicos||0);
+    totaisSistema.residuoDiferencaFaturamentoServico = Number(first.residuoDiferencaFaturamentoServico||0);
 
     $('#t-valor-total-pedido').textContent = fmtBRL(totaisSistema.valorTotalPedido);
     $('#t-valor-fatur-direto').textContent = fmtBRL(totaisSistema.valorFaturamentoDiretoOrcado);
-    $('#t-nf-produtos').textContent       = fmtBRL(totaisSistema.valorNFProdutos);
-    $('#t-nf-servicos').textContent       = fmtBRL(totaisSistema.valorNFServicos);
+    $('#t-valor-uf').textContent           = fmtBRL(totaisSistema.valorAproximadoUF);
+    $('#t-nf-produtos').textContent        = fmtBRL(totaisSistema.valorNFProdutos);
+    $('#t-nf-servicos').textContent        = fmtBRL(totaisSistema.valorNFServicos);
+    $('#t-dif-fatur-serv').textContent     = fmtBRL(totaisSistema.residuoDiferencaFaturamentoServico);
 
     atualizarPrevisaoCabecalho();
     renderTabela();
-    recalcular();
     setStatus('ok');
   }catch(e){
     console.error(e);
@@ -634,7 +629,6 @@ document.getElementById('btn-add-item')?.addEventListener('click', ()=>{
   };
   itens.push(novo);
   renderTabela();
-  recalcular();
   atualizarPrevisaoCabecalho();
 });
 
@@ -671,9 +665,9 @@ async function salvarAlteracoes(){
       clone.fornecedor   = cabecalho.fornecedor   || clone.fornecedor;
       clone.vendedor     = cabecalho.vendedor     || clone.vendedor;
 
-      clone.observacao      = cabecalho.observacao ?? clone.observacao;
-      clone.numeroNotaFiscal= cabecalho.numeroNF ?? clone.numeroNotaFiscal;
-      clone.formaPagamento  = cabecalho.formaPagamento ?? clone.formaPagamento;
+      clone.observacao       = cabecalho.observacao ?? clone.observacao;
+      clone.numeroNotaFiscal = cabecalho.numeroNF ?? clone.numeroNotaFiscal;
+      clone.formaPagamento   = cabecalho.formaPagamento ?? clone.formaPagamento;
 
       clone.meta = { ...(clone.meta || {}) };
       if(cabecalho.telefoneFornecedor) clone.meta.telefoneFornecedor = cabecalho.telefoneFornecedor;
