@@ -1,0 +1,1679 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard de Propostas – Ulhoa</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Fonte Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bg: #020617;
+      --bg-soft: #020617;
+      --card-bg: #020617;
+      --primary: #38bdf8;
+      --primary-soft: rgba(56, 189, 248, 0.15);
+      --primary-strong: #0ea5e9;
+      --text: #e5e7eb;
+      --text-soft: #9ca3af;
+      --border-subtle: #1f2937;
+      --danger: #f97373;
+      --success: #4ade80;
+      --radius-lg: 16px;
+      --radius-xl: 22px;
+      --shadow-soft: 0 24px 60px rgba(15, 23, 42, 0.75);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #1d2537 0, #020617 45%, #000 100%);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .page {
+      width: 100%;
+      max-width: 1440px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 22px;
+      border-radius: var(--radius-xl);
+      background: linear-gradient(120deg, rgba(56, 189, 248, 0.12), transparent),
+                  radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent),
+                  #020617;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .header-left h1 {
+      font-size: 1.7rem;
+      margin: 0 0 4px 0;
+    }
+
+    .header-left p {
+      margin: 0;
+      font-size: 0.92rem;
+      color: var(--text-soft);
+    }
+
+    .header-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .chip {
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      color: var(--text-soft);
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(8px);
+    }
+
+    .chip.primary {
+      border-color: rgba(56, 189, 248, 0.8);
+      color: var(--primary-strong);
+      background: rgba(15, 23, 42, 0.95);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .refresh-btn,
+    .btn-secondary {
+      border-radius: 999px;
+      border: 1px solid rgba(56, 189, 248, 0.6);
+      background: radial-gradient(circle at top, rgba(56, 189, 248, 0.25), rgba(15, 23, 42, 0.98));
+      color: var(--text);
+      font-size: 0.86rem;
+      padding: 8px 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+      transition: all 0.15s ease-out;
+      white-space: nowrap;
+    }
+
+    .refresh-btn:hover,
+    .btn-secondary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 24px rgba(56, 189, 248, 0.35);
+      border-color: var(--primary-strong);
+    }
+
+    .btn-secondary {
+      border-color: rgba(148, 163, 184, 0.6);
+      background: rgba(15, 23, 42, 0.96);
+      font-size: 0.78rem;
+      padding: 6px 10px;
+    }
+
+    .refresh-btn span.icon {
+      font-size: 1rem;
+    }
+
+    .tag-pill {
+      font-size: 0.72rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      color: var(--text-soft);
+      background: rgba(15, 23, 42, 0.9);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tag-pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.25);
+    }
+
+    /* Barra de filtros globais */
+    .filters-bar {
+      border-radius: var(--radius-lg);
+      background: rgba(15, 23, 42, 0.98);
+      border: 1px solid rgba(31, 41, 55, 0.9);
+      padding: 10px 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .filters-title {
+      font-size: 0.82rem;
+      color: var(--text-soft);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .filters-title span.dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--primary);
+      box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.25);
+    }
+
+    .filters-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .filter-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .filter-field label {
+      font-size: 0.72rem;
+      color: var(--text-soft);
+    }
+
+    .filter-field input,
+    .filter-field select {
+      width: 100%;
+      border-radius: 999px;
+      border: 1px solid rgba(55, 65, 81, 0.9);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text);
+      padding: 6px 10px;
+      font-size: 0.78rem;
+      outline: none;
+    }
+
+    .filter-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .btn-reset {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      background: transparent;
+      color: var(--text-soft);
+      font-size: 0.75rem;
+      padding: 6px 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-reset:hover {
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text);
+    }
+
+    /* Layout principal agora em COLUNA (sem laterais) */
+    .layout-column {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      border-radius: var(--radius-lg);
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.06), transparent),
+                  #020617;
+      border: 1px solid rgba(31, 41, 55, 0.9);
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.8);
+      padding: 14px 16px 14px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .card.stat {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card.stat::after {
+      content: "";
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.12), transparent 70%);
+      top: -40px;
+      right: -18px;
+      opacity: 0.7;
+    }
+
+    .stat-label {
+      font-size: 0.78rem;
+      color: var(--text-soft);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .stat-label span.dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.8);
+    }
+
+    .stat-value {
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .stat-sub {
+      font-size: 0.78rem;
+      color: var(--text-soft);
+    }
+
+    .chip-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(55, 65, 81, 0.85);
+      color: var(--text-soft);
+    }
+
+    .chip-inline strong {
+      color: var(--primary-strong);
+      font-weight: 600;
+      font-size: 0.72rem;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1.1fr;
+      gap: 12px;
+    }
+
+    .card h2 {
+      font-size: 0.98rem;
+      margin: 0 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .card h2 .small {
+      font-size: 0.75rem;
+      color: var(--text-soft);
+      font-weight: 400;
+    }
+
+    .card h2 .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--primary);
+      box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.25);
+    }
+
+    .chart-container {
+      position: relative;
+      height: 220px;
+    }
+
+    .chart-container.small-chart {
+      height: 190px;
+    }
+
+    .table-card {
+      margin-top: 0;
+    }
+
+    .table-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .table-header h2 {
+      margin: 0;
+      flex: 1;
+      font-size: 0.98rem;
+    }
+
+    .table-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .search-input {
+      min-width: 220px;
+      border-radius: 999px;
+      border: 1px solid rgba(55, 65, 81, 0.9);
+      background: rgba(15, 23, 42, 0.85);
+      color: var(--text);
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      outline: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .search-input input {
+      border: none;
+      outline: none;
+      background: transparent;
+      color: inherit;
+      flex: 1;
+      font-size: inherit;
+    }
+
+    .search-input span {
+      font-size: 0.86rem;
+      color: var(--text-soft);
+    }
+
+    .table-wrapper {
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid rgba(31, 41, 55, 0.9);
+      background: rgba(15, 23, 42, 0.96);
+      max-height: 500px; /* maior porque agora é full width */
+      overflow-y: auto;
+    }
+
+    .mini-table-wrapper {
+      max-height: 260px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #020617;
+    }
+
+    th, td {
+      padding: 7px 9px;
+      border-bottom: 1px solid rgba(31, 41, 55, 0.9);
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      font-weight: 500;
+      font-size: 0.74rem;
+      color: var(--text-soft);
+    }
+
+    tr:nth-child(even) td {
+      background: rgba(15, 23, 42, 0.9);
+    }
+
+    tr:hover td {
+      background: rgba(15, 23, 42, 1);
+    }
+
+    td.muted {
+      color: var(--text-soft);
+    }
+
+    .pill-status {
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border: 1px solid rgba(55, 65, 81, 0.96);
+      background: rgba(15, 23, 42, 0.95);
+    }
+
+    .pill-status.pending {
+      border-color: rgba(234, 179, 8, 0.7);
+      color: #facc15;
+    }
+
+    .pill-status.approved {
+      border-color: rgba(34, 197, 94, 0.8);
+      color: #4ade80;
+    }
+
+    .pill-status.started {
+      border-color: rgba(96, 165, 250, 0.8);
+      color: #60a5fa;
+    }
+
+    .pill-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+
+    .client-name {
+      max-width: 210px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge-origem {
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(30, 64, 175, 0.4);
+      border: 1px solid rgba(37, 99, 235, 0.6);
+      color: #bfdbfe;
+    }
+
+    .footer-meta {
+      margin-top: 8px;
+      font-size: 0.72rem;
+      color: var(--text-soft);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .footer-meta strong {
+      color: var(--primary-strong);
+      font-weight: 600;
+    }
+
+    .small-pill {
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(55, 65, 81, 0.9);
+      color: var(--text-soft);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .small-pill .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.9);
+    }
+
+    #loadingState {
+      font-size: 0.8rem;
+      color: var(--text-soft);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #loadingState .spinner {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 2px solid rgba(148, 163, 184, 0.4);
+      border-top-color: var(--primary-strong);
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 1180px) {
+      .filters-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .charts-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 900px) {
+      body {
+        padding: 12px;
+      }
+      .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        gap: 12px;
+      }
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+      .filters-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .table-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .search-input {
+        min-width: 0;
+        width: 100%;
+      }
+    }
+    .chart-container {
+  position: relative;
+  height: 170px;   /* era 220px */
+}
+
+.chart-container.small-chart {
+  height: 140px;   /* era 190px */
+}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="header-left">
+        <h1>Dashboard de Propostas</h1>
+        <p>Visão em tempo real de orçamentos, origens de leads, materiais e produtos.</p>
+        <div class="header-tags">
+          <span class="chip primary">API · /api/propostas</span>
+          <span class="chip">Filtros dinâmicos · Exportação CSV</span>
+          <span class="chip">Indicadores por leads, valores e itens</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="refreshButton" class="refresh-btn">
+          <span class="icon">⟳</span>
+          Atualizar dados
+        </button>
+        <span class="tag-pill">
+          <span class="tag-pill-dot"></span>
+          <span id="loadingStateText">Aguardando carregamento...</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- Filtros globais -->
+    <section class="card filters-bar">
+      <div class="filters-title">
+        <span class="dot"></span>
+        Filtros globais (afetam cards, gráficos e tabelas)
+      </div>
+      <div class="filters-grid">
+        <div class="filter-field">
+          <label for="filterDataInicio">Data orçamento (início)</label>
+          <input type="date" id="filterDataInicio">
+        </div>
+        <div class="filter-field">
+          <label for="filterDataFim">Data orçamento (fim)</label>
+          <input type="date" id="filterDataFim">
+        </div>
+        <div class="filter-field">
+          <label for="filterOrigem">Origem do cliente</label>
+          <select id="filterOrigem">
+            <option value="">Todas</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="filterStatus">Status do orçamento</label>
+          <select id="filterStatus">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="filterTipo">Tipo de proposta</label>
+          <select id="filterTipo">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="filter-actions">
+          <button id="resetFiltersBtn" class="btn-reset">Limpar filtros</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Layout em coluna -->
+    <div class="layout-column">
+      <!-- Cards resumo -->
+      <section class="summary-grid">
+        <article class="card stat">
+          <div class="stat-label">
+            <span class="dot"></span> Total de propostas (filtradas)
+          </div>
+          <div class="stat-value" id="statTotalPropostas">--</div>
+          <div class="stat-sub">
+            <span class="chip-inline">
+              <span class="dot"></span>
+              Período: <strong id="statPeriodo">—</strong>
+            </span>
+          </div>
+        </article>
+
+        <article class="card stat">
+          <div class="stat-label">
+            <span class="dot"></span> Valor total de materiais
+          </div>
+          <div class="stat-value" id="statTotalMateriais">--</div>
+          <div class="stat-sub">Soma de <strong>custoTotalMaterial</strong> por grupo.</div>
+        </article>
+
+        <article class="card stat">
+          <div class="stat-label">
+            <span class="dot"></span> Total previsto em parcelas
+          </div>
+          <div class="stat-value" id="statTotalParcelas">--</div>
+          <div class="stat-sub">Somatório de <strong>parcelas.valor</strong> nas propostas.</div>
+        </article>
+
+        <article class="card stat">
+          <div class="stat-label">
+            <span class="dot"></span> Origens de leads
+          </div>
+          <div class="stat-value" id="statTotalOrigens">--</div>
+          <div class="stat-sub">
+            <span class="chip-inline">
+              <span class="dot"></span>
+              Principal: <strong id="statOrigemPrincipal">--</strong>
+            </span>
+          </div>
+        </article>
+      </section>
+
+      <!-- Gráficos -->
+      <section class="charts-grid">
+        <article class="card">
+          <h2>
+            <span>Origem dos leads</span>
+            <span class="small-pill">
+              <span class="dot"></span> Propostas por canal
+            </span>
+          </h2>
+          <div class="chart-container">
+            <canvas id="chartOrigem"></canvas>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>
+            <span>Status dos orçamentos</span>
+            <span class="small-pill">
+              <span class="dot"></span> Pipeline comercial
+            </span>
+          </h2>
+          <div class="chart-container">
+            <canvas id="chartStatus"></canvas>
+          </div>
+        </article>
+      </section>
+
+      <!-- Propostas detalhadas – FULL WIDTH -->
+      <section class="card table-card">
+        <div class="table-header">
+          <h2>Propostas detalhadas
+            <span class="small-pill"><span class="dot"></span> Por cliente</span>
+          </h2>
+          <div class="table-actions">
+            <div class="search-input">
+              <span>🔎</span>
+              <input id="searchInputPropostas" type="search" placeholder="Buscar nº, cliente, origem, status...">
+            </div>
+            <button id="exportPropostasBtn" class="btn-secondary">Exportar CSV</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th># Orçamento</th>
+                <th>Data</th>
+                <th>Origem</th>
+                <th>Cliente principal</th>
+                <th>Status</th>
+                <th>Tipo</th>
+                <th>Valor materiais</th>
+                <th>Parcelas</th>
+                <th>Criado em</th>
+              </tr>
+            </thead>
+            <tbody id="propostasTableBody">
+              <!-- Linhas via JS -->
+            </tbody>
+          </table>
+        </div>
+        <div class="footer-meta">
+          <span id="loadingState">
+            <span class="spinner"></span>
+            <span id="loadingStateLabel">Carregando dados...</span>
+          </span>
+          <span>
+            Exibindo <strong id="statPropostasVisiveis">0</strong> de
+            <strong id="statPropostasTotais">0</strong> propostas filtradas.
+          </span>
+        </div>
+      </section>
+
+      <!-- Produtos mais vendidos abaixo -->
+      <section class="card">
+        <div class="table-header">
+          <h2>Produtos mais vendidos
+            <span class="small-pill">
+              <span class="dot"></span> Ranking agregando todos os grupos
+            </span>
+          </h2>
+          <div class="table-actions">
+            <div class="search-input">
+              <span>🔎</span>
+              <input id="searchInputProdutos" type="search" placeholder="Buscar produto ou código Omie...">
+            </div>
+            <button id="exportProdutosBtn" class="btn-secondary">Exportar CSV</button>
+          </div>
+        </div>
+        <div class="table-wrapper mini-table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Produto</th>
+                <th>Cód. Omie</th>
+                <th>Qtde total</th>
+                <th>Qtde desejada</th>
+                <th>Ocorrências</th>
+                <th>Total custo</th>
+                <th>Total preço</th>
+              </tr>
+            </thead>
+            <tbody id="produtosTableBody">
+              <!-- Linhas via JS -->
+            </tbody>
+          </table>
+        </div>
+        <div class="footer-meta">
+          <span>
+            Itens totais: <strong id="statItensQtdTotal">0</strong> · Desejados:
+            <strong id="statItensQtdDesejadaTotal">0</strong>
+          </span>
+          <span>
+            Produtos únicos: <strong id="statProdutosUnicos">0</strong> · Top:
+            <strong id="statProdutoTopNome">--</strong>
+            (<span id="statProdutoTopQtd">0</span> un.)
+          </span>
+        </div>
+      </section>
+
+      <!-- Gráfico top produtos (opcionalmente abaixo da tabela) -->
+      <section class="card">
+        <h2>
+          <span>Top 5 produtos por quantidade</span>
+          <span class="small-pill">
+            <span class="dot"></span> Somando quantidades das propostas filtradas
+          </span>
+        </h2>
+        <div class="chart-container small-chart">
+          <canvas id="chartTopProdutos"></canvas>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "https://ulhoa-0a02024d350a.herokuapp.com/api/propostas/";
+
+    let propostasBrutas = [];
+    let chartOrigem = null;
+    let chartStatus = null;
+    let chartTopProdutos = null;
+
+    let lastPropostasRendered = [];
+    let lastProdutosRendered = [];
+
+    const filters = {
+      origem: "",
+      status: "",
+      tipo: "",
+      dataInicio: "",
+      dataFim: "",
+      searchProposta: "",
+      searchProduto: ""
+    };
+
+    function formatCurrencyBR(value) {
+      const num = Number(value || 0);
+      return num.toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL"
+      });
+    }
+
+    function formatDateBR(dateString) {
+      if (!dateString) return "--";
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        const [y, m, d] = dateString.split("-");
+        return `${d}/${m}/${y}`;
+      }
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return dateString;
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+
+    function parseNumber(value) {
+      if (value == null) return 0;
+      if (typeof value === "number") return value;
+      const str = String(value).replace(/\./g, "").replace(",", ".");
+      const n = parseFloat(str);
+      return isNaN(n) ? 0 : n;
+    }
+
+    function getStatusClass(status) {
+      if (!status) return "";
+      const s = status.toLowerCase();
+      if (s.includes("pendente")) return "pending";
+      if (s.includes("aprov")) return "approved";
+      if (s.includes("iniciado")) return "started";
+      return "";
+    }
+
+    function downloadCsv(filename, rows) {
+      if (!rows || !rows.length) return;
+
+      const csvContent = rows
+        .map(row =>
+          row
+            .map(field => {
+              if (field == null) return "";
+              let val = String(field).replace(/"/g, '""');
+              if (/[",;\n]/.test(val)) {
+                val = `"${val}"`;
+              }
+              return val;
+            })
+            .join(";")
+        )
+        .join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function montarRelatorio(propostas) {
+      return propostas.map((p) => {
+        const f = p.camposFormulario || {};
+        const grupos = p.grupos || [];
+        const parcelas = f.parcelas || [];
+
+        const valorMateriais = grupos.reduce((acc, g) => {
+          const params = g.parametros || {};
+          return acc + parseNumber(params.custoTotalMaterial);
+        }, 0);
+
+        const totalParcelas = parcelas.reduce((acc, parc) => {
+          return acc + parseNumber(parc.valor);
+        }, 0);
+
+        const clientes = Array.isArray(f.clientes) ? f.clientes : [];
+        const clientePrincipal = clientes[0]?.nome_razao_social || "--";
+
+        return {
+          id: p._id,
+          numeroProposta: p.numeroProposta || f.numeroOrcamento || "",
+          numeroOrcamento: f.numeroOrcamento || p.numeroProposta || "",
+          dataOrcamento: f.dataOrcamento || "",
+          origemCliente: f.origemCliente || "Não informado",
+          clientesNomes: clientes.map((c) => c.nome_razao_social).join(", "),
+          clientePrincipal,
+          statusOrcamento: p.statusOrcamento || "Sem status",
+          tipoProposta: p.tipoProposta || "—",
+          valorMateriais,
+          totalParcelas,
+          quantidadeGrupos: grupos.length,
+          quantidadeItens: grupos.reduce((acc, g) => acc + (g.itens?.length || 0), 0),
+          criadoEm: p.criado_em || ""
+        };
+      });
+    }
+
+    function montarResumoProdutos(propostas) {
+      const map = new Map();
+      let totalQuantidade = 0;
+      let totalQuantidadeDesejada = 0;
+
+      propostas.forEach((p) => {
+        (p.grupos || []).forEach((g) => {
+          (g.itens || []).forEach((item) => {
+            const nome = item.nome_produto || "Sem nome";
+            const codigo = item.codigo_omie || "";
+            const key = nome + "|" + codigo;
+
+            const existente = map.get(key) || {
+              nome_produto: nome,
+              codigo_omie: codigo,
+              totalQuantidade: 0,
+              totalQuantidadeDesejada: 0,
+              totalCusto: 0,
+              totalPreco: 0,
+              ocorrencias: 0
+            };
+
+            const q = parseNumber(item.quantidade);
+            const qd = parseNumber(item.quantidade_desejada);
+            const c = parseNumber(item.custo);
+            const pVal = parseNumber(item.preco);
+
+            existente.totalQuantidade += q;
+            existente.totalQuantidadeDesejada += qd;
+            existente.totalCusto += c;
+            existente.totalPreco += pVal;
+            existente.ocorrencias += 1;
+
+            map.set(key, existente);
+
+            totalQuantidade += q;
+            totalQuantidadeDesejada += qd;
+          });
+        });
+      });
+
+      const produtosAgregados = Array.from(map.values()).sort(
+        (a, b) => b.totalQuantidade - a.totalQuantidade
+      );
+
+      return {
+        produtosAgregados,
+        totalQuantidade,
+        totalQuantidadeDesejada
+      };
+    }
+
+    const elTotalPropostas = document.getElementById("statTotalPropostas");
+    const elTotalMateriais = document.getElementById("statTotalMateriais");
+    const elTotalParcelas = document.getElementById("statTotalParcelas");
+    const elTotalOrigens = document.getElementById("statTotalOrigens");
+    const elOrigemPrincipal = document.getElementById("statOrigemPrincipal");
+    const elPeriodo = document.getElementById("statPeriodo");
+
+    const elTabelaBodyPropostas = document.getElementById("propostasTableBody");
+    const elPropostasVisiveis = document.getElementById("statPropostasVisiveis");
+    const elPropostasTotais = document.getElementById("statPropostasTotais");
+
+    const elProdutosTableBody = document.getElementById("produtosTableBody");
+    const elItensQtdTotal = document.getElementById("statItensQtdTotal");
+    const elItensQtdDesejadaTotal = document.getElementById("statItensQtdDesejadaTotal");
+    const elProdutosUnicos = document.getElementById("statProdutosUnicos");
+    const elProdutoTopNome = document.getElementById("statProdutoTopNome");
+    const elProdutoTopQtd = document.getElementById("statProdutoTopQtd");
+
+    const elLoadingText = document.getElementById("loadingStateText");
+    const elLoadingLabel = document.getElementById("loadingStateLabel");
+
+    const elFilterOrigem = document.getElementById("filterOrigem");
+    const elFilterStatus = document.getElementById("filterStatus");
+    const elFilterTipo = document.getElementById("filterTipo");
+    const elFilterDataInicio = document.getElementById("filterDataInicio");
+    const elFilterDataFim = document.getElementById("filterDataFim");
+
+    const elSearchPropostas = document.getElementById("searchInputPropostas");
+    const elSearchProdutos = document.getElementById("searchInputProdutos");
+
+    function atualizarResumoPropostas(relatorioBase) {
+      const totalPropostas = relatorioBase.length;
+      const totalMateriais = relatorioBase.reduce((acc, r) => acc + r.valorMateriais, 0);
+      const totalParcelas = relatorioBase.reduce((acc, r) => acc + r.totalParcelas, 0);
+
+      const origemCount = {};
+      const statusCount = {};
+      let menorData = null;
+      let maiorData = null;
+
+      relatorioBase.forEach((r) => {
+        const origem = r.origemCliente || "Não informado";
+        origemCount[origem] = (origemCount[origem] || 0) + 1;
+
+        const status = r.statusOrcamento || "Sem status";
+        statusCount[status] = (statusCount[status] || 0) + 1;
+
+        if (r.dataOrcamento) {
+          const d = new Date(r.dataOrcamento);
+          if (!isNaN(d.getTime())) {
+            if (!menorData || d < menorData) menorData = d;
+            if (!maiorData || d > maiorData) maiorData = d;
+          }
+        }
+      });
+
+      elTotalPropostas.textContent = totalPropostas;
+      elTotalMateriais.textContent = formatCurrencyBR(totalMateriais);
+      elTotalParcelas.textContent = formatCurrencyBR(totalParcelas);
+      elPropostasTotais.textContent = totalPropostas;
+
+      const origens = Object.entries(origemCount);
+      elTotalOrigens.textContent = origens.length;
+
+      if (origens.length === 0) {
+        elOrigemPrincipal.textContent = "—";
+      } else {
+        const principal = origens.sort((a, b) => b[1] - a[1])[0][0];
+        elOrigemPrincipal.textContent = principal;
+      }
+
+      if (menorData && maiorData) {
+        elPeriodo.textContent = `${formatDateBR(menorData.toISOString())} · ${formatDateBR(
+          maiorData.toISOString()
+        )}`;
+      } else {
+        elPeriodo.textContent = "—";
+      }
+
+      atualizarGraficos(origemCount, statusCount);
+    }
+
+    function atualizarResumoProdutos(resumoBase, produtosParaTabela) {
+      const { produtosAgregados, totalQuantidade, totalQuantidadeDesejada } = resumoBase;
+
+      elItensQtdTotal.textContent = totalQuantidade.toLocaleString("pt-BR");
+      elItensQtdDesejadaTotal.textContent = totalQuantidadeDesejada.toLocaleString("pt-BR");
+      elProdutosUnicos.textContent = produtosAgregados.length;
+
+      const topGlobal = produtosAgregados[0];
+      if (topGlobal) {
+        elProdutoTopNome.textContent = topGlobal.nome_produto;
+        elProdutoTopQtd.textContent = topGlobal.totalQuantidade.toLocaleString("pt-BR");
+      } else {
+        elProdutoTopNome.textContent = "--";
+        elProdutoTopQtd.textContent = "0";
+      }
+
+      renderTabelaProdutos(produtosParaTabela);
+      atualizarGraficoTopProdutos(produtosParaTabela);
+    }
+
+    function atualizarGraficos(origemCount, statusCount) {
+      const origemLabels = Object.keys(origemCount);
+      const origemData = Object.values(origemCount);
+
+      const statusLabels = Object.keys(statusCount);
+      const statusData = Object.values(statusCount);
+
+      const origemColors = origemLabels.map((_, i) => {
+        const palette = [
+          "rgba(56, 189, 248, 0.9)",
+          "rgba(96, 165, 250, 0.9)",
+          "rgba(52, 211, 153, 0.9)",
+          "rgba(248, 250, 252, 0.9)",
+          "rgba(251, 191, 36, 0.9)",
+          "rgba(248, 113, 113, 0.9)"
+        ];
+        return palette[i % palette.length];
+      });
+
+      const statusColors = statusLabels.map((label) => {
+        const l = label.toLowerCase();
+        if (l.includes("pendente")) return "rgba(251, 191, 36, 0.9)";
+        if (l.includes("aprov")) return "rgba(52, 211, 153, 0.9)";
+        if (l.includes("iniciado")) return "rgba(96, 165, 250, 0.9)";
+        return "rgba(148, 163, 184, 0.9)";
+      });
+
+      const origemCtx = document.getElementById("chartOrigem").getContext("2d");
+      const statusCtx = document.getElementById("chartStatus").getContext("2d");
+
+      if (chartOrigem) chartOrigem.destroy();
+      if (chartStatus) chartStatus.destroy();
+
+      chartOrigem = new Chart(origemCtx, {
+        type: "bar",
+        data: {
+          labels: origemLabels,
+          datasets: [
+            {
+              label: "Propostas",
+              data: origemData,
+              backgroundColor: origemColors,
+              borderRadius: 8,
+              borderWidth: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af", font: { size: 10 } },
+              grid: { display: false }
+            },
+            y: {
+              ticks: { color: "#9ca3af", font: { size: 10 }, precision: 0 },
+              grid: { color: "rgba(31, 41, 55, 0.7)" },
+              beginAtZero: true
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.parsed.y} propostas`
+              }
+            }
+          }
+        }
+      });
+
+      chartStatus = new Chart(statusCtx, {
+        type: "doughnut",
+        data: {
+          labels: statusLabels,
+          datasets: [
+            {
+              data: statusData,
+              backgroundColor: statusColors,
+              borderWidth: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: {
+                color: "#e5e7eb",
+                font: { size: 10 },
+                padding: 10
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                  const value = ctx.parsed;
+                  const pct = total ? ((value / total) * 100).toFixed(1) : 0;
+                  return ` ${ctx.label}: ${value} (${pct}%)`;
+                }
+              }
+            }
+          },
+          cutout: "62%"
+        }
+      });
+    }
+
+    function atualizarGraficoTopProdutos(produtosParaTabela) {
+      const top5 = produtosParaTabela.slice(0, 5);
+      const labels = top5.map((p) => p.nome_produto);
+      const data = top5.map((p) => p.totalQuantidade);
+
+      const ctx = document.getElementById("chartTopProdutos").getContext("2d");
+      if (chartTopProdutos) chartTopProdutos.destroy();
+
+      chartTopProdutos = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Quantidade",
+              data,
+              backgroundColor: "rgba(56, 189, 248, 0.9)",
+              borderRadius: 8,
+              borderWidth: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af", font: { size: 10 } },
+              grid: { display: false }
+            },
+            y: {
+              ticks: { color: "#9ca3af", font: { size: 10 }, precision: 0 },
+              grid: { color: "rgba(31, 41, 55, 0.7)" },
+              beginAtZero: true
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.parsed.y} unidades`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderTabelaPropostas(relatorio) {
+      elTabelaBodyPropostas.innerHTML = "";
+      lastPropostasRendered = relatorio;
+
+      relatorio.forEach((r) => {
+        const tr = document.createElement("tr");
+
+        const tdNumero = document.createElement("td");
+        tdNumero.textContent = r.numeroOrcamento || r.numeroProposta || "—";
+        tr.appendChild(tdNumero);
+
+        const tdData = document.createElement("td");
+        tdData.textContent = formatDateBR(r.dataOrcamento);
+        tdData.classList.add("muted");
+        tr.appendChild(tdData);
+
+        const tdOrigem = document.createElement("td");
+        const origemSpan = document.createElement("span");
+        origemSpan.className = "badge-origem";
+        origemSpan.textContent = r.origemCliente;
+        tdOrigem.appendChild(origemSpan);
+        tr.appendChild(tdOrigem);
+
+        const tdCliente = document.createElement("td");
+        tdCliente.classList.add("client-name");
+        tdCliente.textContent = r.clientePrincipal || "—";
+        tr.appendChild(tdCliente);
+
+        const tdStatus = document.createElement("td");
+        const pill = document.createElement("span");
+        pill.className = "pill-status " + getStatusClass(r.statusOrcamento);
+        const dot = document.createElement("span");
+        dot.className = "pill-status-dot";
+        const text = document.createElement("span");
+        text.textContent = r.statusOrcamento;
+        pill.appendChild(dot);
+        pill.appendChild(text);
+        tdStatus.appendChild(pill);
+        tr.appendChild(tdStatus);
+
+        const tdTipo = document.createElement("td");
+        tdTipo.classList.add("muted");
+        tdTipo.textContent = r.tipoProposta;
+        tr.appendChild(tdTipo);
+
+        const tdValorMateriais = document.createElement("td");
+        tdValorMateriais.textContent = formatCurrencyBR(r.valorMateriais);
+        tr.appendChild(tdValorMateriais);
+
+        const tdParcelas = document.createElement("td");
+        tdParcelas.textContent = r.totalParcelas ? formatCurrencyBR(r.totalParcelas) : "—";
+        tdParcelas.classList.add("muted");
+        tr.appendChild(tdParcelas);
+
+        const tdCriado = document.createElement("td");
+        tdCriado.textContent = formatDateBR(r.criadoEm);
+        tdCriado.classList.add("muted");
+        tr.appendChild(tdCriado);
+
+        elTabelaBodyPropostas.appendChild(tr);
+      });
+
+      elPropostasVisiveis.textContent = relatorio.length;
+    }
+
+    function renderTabelaProdutos(listaProdutos) {
+      elProdutosTableBody.innerHTML = "";
+      lastProdutosRendered = listaProdutos;
+
+      listaProdutos.slice(0, 20).forEach((p) => {
+        const tr = document.createElement("tr");
+
+        const tdNome = document.createElement("td");
+        tdNome.textContent = p.nome_produto;
+        tr.appendChild(tdNome);
+
+        const tdCodigo = document.createElement("td");
+        tdCodigo.textContent = p.codigo_omie || "—";
+        tdCodigo.classList.add("muted");
+        tr.appendChild(tdCodigo);
+
+        const tdQtd = document.createElement("td");
+        tdQtd.textContent = p.totalQuantidade.toLocaleString("pt-BR");
+        tr.appendChild(tdQtd);
+
+        const tdQtdDesejada = document.createElement("td");
+        tdQtdDesejada.textContent = p.totalQuantidadeDesejada.toLocaleString("pt-BR");
+        tdQtdDesejada.classList.add("muted");
+        tr.appendChild(tdQtdDesejada);
+
+        const tdOcorrencias = document.createElement("td");
+        tdOcorrencias.textContent = p.ocorrencias;
+        tdOcorrencias.classList.add("muted");
+        tr.appendChild(tdOcorrencias);
+
+        const tdCusto = document.createElement("td");
+        tdCusto.textContent = formatCurrencyBR(p.totalCusto);
+        tr.appendChild(tdCusto);
+
+        const tdPreco = document.createElement("td");
+        tdPreco.textContent = p.totalPreco ? formatCurrencyBR(p.totalPreco) : "—";
+        tdPreco.classList.add("muted");
+        tr.appendChild(tdPreco);
+
+        elProdutosTableBody.appendChild(tr);
+      });
+    }
+
+    function filtrarPorBuscaPropostas(lista, termo) {
+      const t = termo.toLowerCase();
+      return lista.filter((r) => {
+        const campos = [
+          r.numeroOrcamento,
+          r.numeroProposta,
+          r.origemCliente,
+          r.clientePrincipal,
+          r.statusOrcamento,
+          r.tipoProposta
+        ]
+          .filter(Boolean)
+          .map((v) => String(v).toLowerCase());
+        return campos.some((c) => c.includes(t));
+      });
+    }
+
+    function aplicarFiltros() {
+      let subset = propostasBrutas.filter((p) => {
+        const f = p.camposFormulario || {};
+        const origem = f.origemCliente || "Não informado";
+        const status = p.statusOrcamento || "Sem status";
+        const tipo = p.tipoProposta || "—";
+        const dataStr = f.dataOrcamento;
+
+        if (filters.origem && origem !== filters.origem) return false;
+        if (filters.status && !status.toLowerCase().includes(filters.status.toLowerCase())) return false;
+        if (filters.tipo && tipo !== filters.tipo) return false;
+
+        if (filters.dataInicio || filters.dataFim) {
+          if (!dataStr) return false;
+          const d = new Date(dataStr);
+          if (isNaN(d.getTime())) return false;
+          if (filters.dataInicio) {
+            const di = new Date(filters.dataInicio);
+            if (d < di) return false;
+          }
+          if (filters.dataFim) {
+            const df = new Date(filters.dataFim);
+            df.setHours(23, 59, 59, 999);
+            if (d > df) return false;
+          }
+        }
+
+        return true;
+      });
+
+      const relatorioBase = montarRelatorio(subset);
+      const resumoProdutosBase = montarResumoProdutos(subset);
+
+      let relatorioTabela = relatorioBase;
+      if (filters.searchProposta) {
+        relatorioTabela = filtrarPorBuscaPropostas(relatorioBase, filters.searchProposta);
+      }
+
+      let produtosTabela = resumoProdutosBase.produtosAgregados;
+      if (filters.searchProduto) {
+        const termo = filters.searchProduto.toLowerCase();
+        produtosTabela = produtosTabela.filter((p) => {
+          const nome = (p.nome_produto || "").toLowerCase();
+          const cod = (p.codigo_omie || "").toLowerCase();
+          return nome.includes(termo) || cod.includes(termo);
+        });
+      }
+
+      produtosTabela = produtosTabela.slice().sort((a, b) => b.totalQuantidade - a.totalQuantidade);
+
+      atualizarResumoPropostas(relatorioBase);
+      atualizarResumoProdutos(resumoProdutosBase, produtosTabela);
+      renderTabelaPropostas(relatorioTabela);
+    }
+
+    function popularFiltrosSelects() {
+      const origens = new Set();
+      const statusSet = new Set();
+      const tipos = new Set();
+
+      propostasBrutas.forEach((p) => {
+        const f = p.camposFormulario || {};
+        const origem = f.origemCliente || "Não informado";
+        const status = p.statusOrcamento || "Sem status";
+        const tipo = p.tipoProposta || "—";
+
+        origens.add(origem);
+        statusSet.add(status);
+        tipos.add(tipo);
+      });
+
+      function preencherSelect(select, set, labelTodas) {
+        const atual = select.value;
+        select.innerHTML = "";
+        const optTodas = document.createElement("option");
+        optTodas.value = "";
+        optTodas.textContent = labelTodas;
+        select.appendChild(optTodas);
+
+        Array.from(set).sort().forEach((val) => {
+          const opt = document.createElement("option");
+          opt.value = val;
+          opt.textContent = val;
+          select.appendChild(opt);
+        });
+
+        if (Array.from(set).includes(atual)) {
+          select.value = atual;
+        }
+      }
+
+      preencherSelect(elFilterOrigem, origens, "Todas");
+      preencherSelect(elFilterStatus, statusSet, "Todos");
+      preencherSelect(elFilterTipo, tipos, "Todos");
+    }
+
+    async function carregarPropostas() {
+      try {
+        elLoadingText.textContent = "Carregando dados de propostas...";
+        elLoadingLabel.textContent = "Carregando dados...";
+        document.getElementById("loadingState").style.opacity = "1";
+
+        const response = await fetch(API_URL);
+        if (!response.ok) {
+          throw new Error("Erro ao acessar a API: " + response.status);
+        }
+        const data = await response.json();
+        propostasBrutas = Array.isArray(data) ? data : [];
+
+        popularFiltrosSelects();
+        aplicarFiltros();
+
+        elLoadingText.textContent = "Dados carregados com sucesso.";
+        elLoadingLabel.textContent = "Atualizado agora.";
+      } catch (error) {
+        console.error("Erro ao carregar propostas:", error);
+        elLoadingText.textContent = "Erro ao carregar dados.";
+        elLoadingLabel.textContent = "Verifique a API / conexão.";
+      }
+    }
+
+    document.getElementById("refreshButton").addEventListener("click", carregarPropostas);
+
+    document.getElementById("resetFiltersBtn").addEventListener("click", () => {
+      filters.origem = "";
+      filters.status = "";
+      filters.tipo = "";
+      filters.dataInicio = "";
+      filters.dataFim = "";
+      filters.searchProposta = "";
+      filters.searchProduto = "";
+
+      elFilterOrigem.value = "";
+      elFilterStatus.value = "";
+      elFilterTipo.value = "";
+      elFilterDataInicio.value = "";
+      elFilterDataFim.value = "";
+      elSearchPropostas.value = "";
+      elSearchProdutos.value = "";
+
+      aplicarFiltros();
+    });
+
+    elFilterOrigem.addEventListener("change", () => {
+      filters.origem = elFilterOrigem.value;
+      aplicarFiltros();
+    });
+
+    elFilterStatus.addEventListener("change", () => {
+      filters.status = elFilterStatus.value;
+      aplicarFiltros();
+    });
+
+    elFilterTipo.addEventListener("change", () => {
+      filters.tipo = elFilterTipo.value;
+      aplicarFiltros();
+    });
+
+    elFilterDataInicio.addEventListener("change", () => {
+      filters.dataInicio = elFilterDataInicio.value;
+      aplicarFiltros();
+    });
+
+    elFilterDataFim.addEventListener("change", () => {
+      filters.dataFim = elFilterDataFim.value;
+      aplicarFiltros();
+    });
+
+    elSearchPropostas.addEventListener("input", () => {
+      filters.searchProposta = elSearchPropostas.value;
+      aplicarFiltros();
+    });
+
+    elSearchProdutos.addEventListener("input", () => {
+      filters.searchProduto = elSearchProdutos.value;
+      aplicarFiltros();
+    });
+
+    document.getElementById("exportPropostasBtn").addEventListener("click", () => {
+      const header = [
+        "numeroOrcamento",
+        "numeroProposta",
+        "dataOrcamento",
+        "origemCliente",
+        "clientePrincipal",
+        "statusOrcamento",
+        "tipoProposta",
+        "valorMateriais",
+        "totalParcelas",
+        "quantidadeGrupos",
+        "quantidadeItens",
+        "criadoEm"
+      ];
+
+      const rows = [header].concat(
+        lastPropostasRendered.map((r) => [
+          r.numeroOrcamento,
+          r.numeroProposta,
+          r.dataOrcamento,
+          r.origemCliente,
+          r.clientePrincipal,
+          r.statusOrcamento,
+          r.tipoProposta,
+          r.valorMateriais,
+          r.totalParcelas,
+          r.quantidadeGrupos,
+          r.quantidadeItens,
+          r.criadoEm
+        ])
+      );
+
+      downloadCsv("propostas_filtradas.csv", rows);
+    });
+
+    document.getElementById("exportProdutosBtn").addEventListener("click", () => {
+      const header = [
+        "nome_produto",
+        "codigo_omie",
+        "totalQuantidade",
+        "totalQuantidadeDesejada",
+        "ocorrencias",
+        "totalCusto",
+        "totalPreco"
+      ];
+
+      const rows = [header].concat(
+        lastProdutosRendered.map((p) => [
+          p.nome_produto,
+          p.codigo_omie,
+          p.totalQuantidade,
+          p.totalQuantidadeDesejada,
+          p.ocorrencias,
+          p.totalCusto,
+          p.totalPreco
+        ])
+      );
+
+      downloadCsv("produtos_filtrados.csv", rows);
+    });
+
+    carregarPropostas();
+  </script>
+</body>
+</html>
