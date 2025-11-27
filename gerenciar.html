@@ -403,13 +403,30 @@ $('#voltar').onclick = ()=> window.history.length>1 ? history.back() : (window.l
 
 function getPedidoParam(){
   const u = new URL(window.location.href);
-  // aqui você já usa ?pedido=18092
   return u.searchParams.get('pedido') || '';
 }
 
 function isMaoDeObraHoraNome(nome){
   const n = String(nome||'').trim();
   return n === 'Mão de Obra de Instalação (por Hora)';
+}
+
+/* =======================
+   Helpers de chave p/ insumos
+   ======================= */
+// chave baseada em: codigoOmie + nome + tipo
+function buildKeyFromVidroDoc(doc){
+  const cod  = doc?.meta?.codigoOmie ? String(doc.meta.codigoOmie) : '';
+  const nome = String(doc.vidro || '').trim().toLowerCase();
+  const tipo = String(doc.tipo || '').trim().toLowerCase();
+  return `${cod}||${nome}||${tipo}`;
+}
+
+function buildKeyFromPropostaInsumo(ins){
+  const cod  = ins.codigo_omie ? String(ins.codigo_omie) : '';
+  const nome = String(ins.nome_produto || '').trim().toLowerCase();
+  const tipo = String(ins.descricao_utilizacao || '').trim().toLowerCase();
+  return `${cod}||${nome}||${tipo}`;
 }
 
 // =================== RENDER TABELA COM GRUPOS ===================
@@ -813,6 +830,15 @@ async function carregar(){
       if(nome) nomesProdutosPedido.add(nome.toLowerCase());
     });
 
+    // mapa de insumos já salvos no Mongo (rota vidros) – PRIORIDADE
+    const mapaInsumosVidro = new Map();
+    docsPedido.forEach(d=>{
+      const key = buildKeyFromVidroDoc(d);
+      if(key){
+        mapaInsumosVidro.set(key, d);
+      }
+    });
+
     // cabeçalho a partir do PedidoVidro
     cabecalho.numeroPedido = numeroPedidoStr;
     cabecalho.cliente      = first.cliente   || '';
@@ -921,38 +947,55 @@ async function carregar(){
         if (isMaoDeObraHoraNome(nomeProduto)) return;     // não mostra Mão de Obra
         if (descUtil === 'Produto Acabado') return;       // não mostra o Produto Acabado em si
 
+        // 🔹 PRIORIDADE: se já tiver linha salva na rota de vidros, usa ela como base
+        const keyInsumo = buildKeyFromPropostaInsumo(ins);
+        const docExistente = keyInsumo ? mapaInsumosVidro.get(keyInsumo) : null;
+        if (docExistente && keyInsumo) {
+          // remove do mapa para saber depois o que sobrou sem correspondência, se quiser
+          mapaInsumosVidro.delete(keyInsumo);
+        }
+
+        const base = docExistente || {};
+
+        const vendedorLinha =
+          base.vendedor ||
+          base.responsavelVendedor ||
+          cabecalho.vendedor;
+
         itens.push({
-          numeroPedido: cabecalho.numeroPedido,
-          cliente:      cabecalho.cliente,
-          fornecedor:   cabecalho.fornecedor,
-          vendedor:     cabecalho.vendedor,
+          _id:           base._id, // se veio do Mongo, mantém pra dar PUT depois
+          numeroPedido:  base.numeroPedido || cabecalho.numeroPedido,
+          cliente:       base.cliente || cabecalho.cliente,
+          fornecedor:    base.fornecedor || cabecalho.fornecedor,
+          vendedor:      vendedorLinha,
 
-          vidro:        nomeProduto,
-          tipo:         descUtil || 'Reto',
-          quantidade:   ins.quantidade ?? 0,              // quantidade mesmo, não quantidade_desejada
+          vidro:        base.vidro || nomeProduto,
+          tipo:         base.tipo || descUtil || 'Reto',
+          quantidade:   (typeof base.quantidade === 'number' ? base.quantidade : (ins.quantidade ?? 0)),
 
-          orcamentoEnviado: '',
-          aprovacao:        '',
-          moldeEnviado:     '',
-          recebemosLinkPagamento: '',
-          pagamento:        '',
-          previsao:         previsaoGlobal || '',
-          numeroPedidoFornecedor: '',
-          numeroOrcFornecedor:   '',
-          numeroNotaFiscal:      cabecalho.numeroNF || '',
-          formaPagamento:        cabecalho.formaPagamento || '',
-          vidrosProntos: '',
-          naEmpresa:     '',
-          faturamento:   'Ferreira Ulhoa',
-          observacao:    cabecalho.observacao || '',
-          valorReal:     ins.custo || 0,
+          orcamentoEnviado:       base.orcamentoEnviado || '',
+          aprovacao:              base.aprovacao || '',
+          moldeEnviado:           base.moldeEnviado || '',
+          recebemosLinkPagamento: base.recebemosLinkPagamento || '',
+          pagamento:              base.pagamento || '',
+          previsao:               base.previsao || previsaoGlobal || '',
+          numeroPedidoFornecedor: base.numeroPedidoFornecedor || '',
+          numeroOrcFornecedor:    base.numeroOrcFornecedor || '',
+          numeroNotaFiscal:       base.numeroNotaFiscal || cabecalho.numeroNF || '',
+          formaPagamento:         base.formaPagamento || cabecalho.formaPagamento || '',
+          vidrosProntos:          base.vidrosProntos || '',
+          naEmpresa:              base.naEmpresa || '',
+          faturamento:            base.faturamento || 'Ferreira Ulhoa',
+          observacao:             base.observacao || cabecalho.observacao || '',
+          valorReal:              typeof base.valorReal === 'number' ? base.valorReal : (ins.custo || 0),
 
-          grupoNome: grupoLabelBase,
-          grupoTipo,
+          grupoNome: base.grupoNome || grupoLabelBase,
+          grupoTipo: base.grupoTipo || grupoTipo,
 
           meta: {
+            ...(base.meta || {}),
             grupoNome:           grupoLabelBase,
-            codigoOmie:          ins.codigo_omie || '',
+            codigoOmie:          ins.codigo_omie || (base.meta && base.meta.codigoOmie) || '',
             quantidadeOriginal:  ins.quantidade,
             quantidadeDesejada:  ins.quantidade_desejada
           }
