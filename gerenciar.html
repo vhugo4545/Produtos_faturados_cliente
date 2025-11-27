@@ -405,16 +405,51 @@
   </div>
 </div>
 
-<!-- Popup Resquício -->
+<!-- Popup Resquício (ATUALIZADO) -->
 <div id="popup-residuo" class="modal-backdrop">
   <div class="modal-card">
     <h3>Detalhamento do resquício</h3>
-    <p id="residuo-formula" class="muted">Fórmula: Faturamento direto + NF serviços − Valor real (total).</p>
-    <p>Resquício sugerido: <strong id="residuo-sugestao">R$ 0,00</strong></p>
+
+    <!-- Detalhe do cálculo -->
+    <p id="residuo-formula" class="muted">
+      Fórmula: Faturamento direto + NF serviços − Valor real (total).
+    </p>
+    <p>
+      Resquício sugerido:
+      <strong id="residuo-sugestao">R$ 0,00</strong>
+    </p>
     <p class="muted" style="font-size:12px;">
       Este valor considera os totais digitados acima e a soma atual dos valores reais dos itens.
     </p>
+
+    <!-- Formulário de lançamento do resquício -->
+    <div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--border);">
+      <div class="row" style="grid-template-columns:140px 1fr;margin:4px 0;">
+        <label for="residuo-cliente-nome">Cliente</label>
+        <input
+          id="residuo-cliente-nome"
+          list="lista-clientes-residuo"
+          placeholder="Buscar cliente…"
+        />
+        <datalist id="lista-clientes-residuo"></datalist>
+      </div>
+
+      <div class="row" style="grid-template-columns:140px 1fr;margin:4px 0;">
+        <label for="residuo-valor-input">Valor</label>
+        <input
+          id="residuo-valor-input"
+          type="text"
+          inputmode="decimal"
+          placeholder="R$ 0,00"
+        />
+      </div>
+    </div>
+
+    <!-- Botões -->
     <div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px;">
+      <button type="button" class="btn btn-primary" id="btn-enviar-residuo">
+        Enviar
+      </button>
       <button type="button" class="btn" data-close-residuo>Fechar</button>
     </div>
   </div>
@@ -1070,19 +1105,23 @@ function initTotaisInputs(){
   });
 }
 
-// === Popup Resquício ===
+// === Popup Resquício (ATUALIZADO) ===
 function initPopupResiduo(){
   const popup = document.getElementById('popup-residuo');
   const btn   = document.getElementById('btn-residuo');
   if(!popup || !btn) return;
 
-  const formulaEl = document.getElementById('residuo-formula');
-  const sugEl     = document.getElementById('residuo-sugestao');
+  const formulaEl   = document.getElementById('residuo-formula');
+  const sugEl       = document.getElementById('residuo-sugestao');
+  const inputValor  = document.getElementById('residuo-valor-input');
+  const btnEnviar   = document.getElementById('btn-enviar-residuo');
+  const inputCliente = document.getElementById('residuo-cliente-nome');
 
+  // Abrir popup com detalhes do cálculo
   btn.addEventListener('click', ()=>{
     const totalReal = itens.reduce((acc,i)=> acc + Number(i.valorReal||0), 0);
-    const fatDir = totaisSistema.valorFaturamentoDiretoOrcado || 0;
-    const nfServ = totaisSistema.valorNFServicos || 0;
+    const fatDir    = totaisSistema.valorFaturamentoDiretoOrcado || 0;
+    const nfServ    = totaisSistema.valorNFServicos || 0;
     const residCalc = fatDir + nfServ - totalReal;
 
     if(formulaEl){
@@ -1091,10 +1130,75 @@ function initPopupResiduo(){
     if(sugEl){
       sugEl.textContent = fmtBRL(residCalc);
     }
+    if(inputValor){
+      inputValor.value = fmtBRL(residCalc);
+    }
 
     popup.style.display = 'flex';
   });
 
+  // Máscara simples de moeda no campo de valor
+  if(inputValor){
+    inputValor.addEventListener('blur', (e)=>{
+      const num = moneyToNumber(e.target.value);
+      e.target.value = fmtBRL(num);
+    });
+    inputValor.addEventListener('focus', (e)=>{
+      setTimeout(()=> e.target.select(), 10);
+    });
+  }
+
+  // Clique em enviar resquício
+  if(btnEnviar){
+    btnEnviar.addEventListener('click', async ()=>{
+      const nomeCliente = (inputCliente?.value || '').trim();
+      const valorNum    = moneyToNumber(inputValor?.value || '0');
+
+      if(!nomeCliente){
+        alert('Informe o cliente para lançar o resquício.');
+        return;
+      }
+      if(!valorNum || valorNum <= 0){
+        alert('Informe um valor válido para o resquício.');
+        return;
+      }
+
+      // Usa o mesmo mapa de pessoas do restante da tela
+      const pessoa = (typeof mapaFornecedoresPorNome !== 'undefined')
+        ? mapaFornecedoresPorNome.get(nomeCliente)
+        : null;
+
+      const payload = {
+        numeroPedido: cabecalho.numeroPedido,
+        cliente: nomeCliente,
+        valorResquicio: valorNum,
+        codigo_cliente_omie: pessoa?.codigo_cliente_omie || '',
+        observacao: `Resquício do pedido ${cabecalho.numeroPedido}`
+      };
+
+      console.log('📤 Payload resquício pronto para envio:', payload);
+      alert('Resquício preparado. Veja os detalhes no console para integrar com seu backend/Omie.');
+
+      popup.style.display = 'none';
+
+      /*
+      try{
+        const r = await fetch('SUA_URL_DE_ENVIO_AQUI', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const j = await r.json();
+        console.log('Resposta envio resquício:', j);
+      }catch(err){
+        console.error('Erro ao enviar resquício:', err);
+        alert('Erro ao enviar resquício. Veja detalhes no console.');
+      }
+      */
+    });
+  }
+
+  // Fechar popup ao clicar fora ou no botão Fechar
   popup.addEventListener('click', e=>{
     if(e.target === popup || e.target.closest('[data-close-residuo]')){
       popup.style.display = 'none';
@@ -1138,6 +1242,8 @@ async function carregarPessoas(){
     });
 
     preencherDatalist('lista-fornecedores', cachePessoas);
+    // também alimenta o datalist do popup de resquício
+    preencherDatalist('lista-clientes-residuo', cachePessoas);
   }catch(e){
     console.warn('Falha ao carregar pessoas:', e);
   }
@@ -1224,6 +1330,24 @@ if (inpFornecedor){
 }
 
 carregarPessoas();
+
+// =========================
+//  Busca de cliente no popup de resquício
+// =========================
+(function initBuscaClienteResiduo(){
+  const inp = document.getElementById('residuo-cliente-nome');
+  if(!inp) return;
+
+  let timer = null;
+  inp.addEventListener('input', (e)=>{
+    const q = e.target.value.trim();
+    clearTimeout(timer);
+    timer = setTimeout(()=>{
+      const sugestoes = sugerirPorTexto(q);
+      preencherDatalist('lista-clientes-residuo', sugestoes);
+    }, 200);
+  });
+})();
 </script>
 
 </body>
