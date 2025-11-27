@@ -281,7 +281,7 @@
       <table id="tabela-itens">
         <thead>
           <tr>
-            <th>Vidro</th>
+            <th>Vidro / Insumo</th>
             <th>Tipo</th>
             <th>Quantidade</th>
             <th>Orçamento enviado</th>
@@ -340,7 +340,9 @@
 </div>
 
 <script>
-const BASE_URL = 'https://ulhoa-vidros-1ae0adcf5f73.herokuapp.com'; // ajuste se necessário
+const BASE_URL       = 'https://ulhoa-vidros-1ae0adcf5f73.herokuapp.com';
+const PROPOSTAS_URL  = 'https://ulhoa-0a02024d350a.herokuapp.com/api/propostas';
+
 const $ = (s,root=document)=>root.querySelector(s);
 const setStatus = t => { const el=$('#status'); if(el) el.textContent='status: '+t; };
 
@@ -365,6 +367,10 @@ function moneyToNumber(str){
 // Estado
 let itens = [];
 let itensRemovidosIds = new Set();
+let filtroGrupoTipo = 'todos'; // 'todos' | 'produto' | 'vidro'
+
+// nomes de Produto Acabado presentes no pedido (campo vidro do PedidoVidro)
+let nomesProdutosPedido = new Set();
 
 let cabecalho = {
   numeroPedido: '',
@@ -393,131 +399,198 @@ $('#voltar').onclick = ()=> window.history.length>1 ? history.back() : (window.l
 
 function getPedidoParam(){
   const u = new URL(window.location.href);
+  // aqui você já usa ?pedido=18092
   return u.searchParams.get('pedido') || '';
 }
 
-// helper para ignorar produto "Mão de Obra..."
-function isMaoDeObraHora(doc){
-  const nome = (doc.vidro || doc.descricao || doc.produto || '').trim();
-  return nome === 'Mão de Obra de Instalação (por Hora)';
+function isMaoDeObraHoraNome(nome){
+  const n = String(nome||'').trim();
+  return n === 'Mão de Obra de Instalação (por Hora)';
 }
 
-// Renderização da tabela
+// =================== RENDER TABELA COM GRUPOS ===================
 function renderTabela(){
   const tbody = $('#tabela-itens tbody'); 
   tbody.innerHTML='';
+
+  const gruposMap = new Map();
   let totalReal = 0;
 
-  itens.forEach((i, idx)=>{
-    totalReal += Number(i.valorReal || 0);
-    const tr = document.createElement('tr');
+  itens.forEach((item, idx)=>{
+    totalReal += Number(item.valorReal || 0);
 
-    const td = (html)=>{ const el=document.createElement('td'); el.innerHTML=html; return el; };
-
-    const text   = (val)=> `<div class="cell"><input type="text" value="${val??''}"/></div>`;
-    const num    = (val)=> `<div class="cell"><input type="number" step="1" min="0" value="${val??''}"/></div>`;
-    const date   = (val)=> `<div class="cell"><input type="date" value="${toISODate(val)}"/></div>`;
-    const money  = (val)=> `<div class="cell"><input class="money" type="text" inputmode="decimal" value="${fmtBRL(val||0)}"/></div>`;
-    const tipo   = (val)=> `
-      <div class="cell">
-        <select data-free="1">
-          ${['Reto','Inclinado','Croqui'].map(opt=>`<option ${String(val||'').toLowerCase()===opt.toLowerCase()?'selected':''}>${opt}</option>`).join('')}
-        </select>
-      </div>`;
-    const fatur  = (val)=> `
-      <div class="cell">
-        <select data-free="1">
-          ${['Ferreira Ulhoa','Direto'].map(opt=>`<option ${String(val||'').toLowerCase()===opt.toLowerCase()?'selected':''}>${opt}</option>`).join('')}
-          <option value="${val??''}" ${val && !['ferreira ulhoa','direto'].includes(String(val).toLowerCase())?'selected':''}>${val??''}</option>
-        </select>
-      </div>`;
-
-    tr.appendChild(td(text(i.vidro||'')));                     tr.lastChild.setAttribute('data-k','vidro');
-    tr.appendChild(td(tipo(i.tipo||'Reto')));                  tr.lastChild.setAttribute('data-k','tipo');
-    tr.appendChild(td(num(i.quantidade??'')));                 tr.lastChild.setAttribute('data-k','quantidade');
-    tr.appendChild(td(date(i.orcamentoEnviado)));              tr.lastChild.setAttribute('data-k','orcamentoEnviado');
-    tr.appendChild(td(date(i.aprovacao)));                     tr.lastChild.setAttribute('data-k','aprovacao');
-    tr.appendChild(td(date(i.moldeEnviado)));                  tr.lastChild.setAttribute('data-k','moldeEnviado');
-    tr.appendChild(td(date(i.recebemosLinkPagamento)));        tr.lastChild.setAttribute('data-k','recebemosLinkPagamento');
-    tr.appendChild(td(date(i.pagemento||i.pagamento)));        tr.lastChild.setAttribute('data-k','pagamento');
-    tr.appendChild(td(date(i.previsao)));                      tr.lastChild.setAttribute('data-k','previsao');
-    tr.appendChild(td(text(i.numeroPedidoFornecedor||'')));    tr.lastChild.setAttribute('data-k','numeroPedidoFornecedor');
-    tr.appendChild(td(text(i.numeroOrcFornecedor||'')));       tr.lastChild.setAttribute('data-k','numeroOrcFornecedor');
-    tr.appendChild(td(date(i.vidrosProntos)));                 tr.lastChild.setAttribute('data-k','vidrosProntos');
-    tr.appendChild(td(date(i.naEmpresa)));                     tr.lastChild.setAttribute('data-k','naEmpresa');
-    tr.appendChild(td(fatur(i.faturamento||'Ferreira Ulhoa')));tr.lastChild.setAttribute('data-k','faturamento');
-    tr.appendChild(td(money(i.valorReal||0)));                 tr.lastChild.setAttribute('data-k','valorReal');
-
-    // Ações (remover)
-    const tdAcoes = document.createElement('td');
-    tdAcoes.innerHTML = `
-      <button type="button" class="btn btn-danger btn-icon" data-remove>
-        ✕ Remover
-      </button>
-    `;
-    tr.appendChild(tdAcoes);
-
-    tbody.appendChild(tr);
-
-    // listeners de edição
-    tr.querySelectorAll('td').forEach(td=>{
-      const k = td.getAttribute('data-k');
-      const inp = td.querySelector('input, select');
-      if(!k || !inp) return;
-
-      if(inp.tagName==='SELECT' && inp.dataset.free === '1'){
-        inp.addEventListener('change', ()=>{
-          itens[idx][k] = inp.value;
-          // não mexe nos totais do card (vem do server)
-        });
-      }else if(inp.type==='date'){
-        inp.addEventListener('change', ()=>{
-          itens[idx][k] = toISODate(inp.value) || '';
-          atualizarPrevisaoCabecalho();
-        });
-      }else if(k==='quantidade'){
-        inp.addEventListener('change', ()=>{
-          itens[idx][k] = Number(inp.value||0);
-        });
-      }else if(k==='valorReal'){
-        inp.addEventListener('change', ()=>{
-          const n = moneyToNumber(inp.value);
-          itens[idx][k] = n;
-          inp.value = fmtBRL(n);
-          recalcularTotaisLocais();
-        });
-        inp.addEventListener('blur', ()=>{ inp.value = fmtBRL(moneyToNumber(inp.value)); });
-        inp.addEventListener('focus', ()=> inp.select());
-      }else{
-        inp.addEventListener('change', ()=>{ itens[idx][k] = inp.value; });
-      }
-    });
-
-    // botão remover
-    const btnRem = tr.querySelector('[data-remove]');
-    if(btnRem){
-      btnRem.addEventListener('click', ()=>{
-        const removed = itens[idx];
-        if(removed && removed._id){
-          itensRemovidosIds.add(removed._id);
-        }
-        itens.splice(idx,1);
-        renderTabela();
-        recalcularTotaisLocais();
-        atualizarPrevisaoCabecalho();
+    const key = `${item.grupoTipo || 'outro'}::${item.grupoNome || '(Sem grupo)'}`;
+    if(!gruposMap.has(key)){
+      gruposMap.set(key, {
+        tipo: item.grupoTipo || 'outro',
+        label: item.grupoNome || '(Sem grupo)',
+        entries: []
       });
     }
+    gruposMap.get(key).entries.push({ idx, item });
+  });
+
+  gruposMap.forEach((grupoMeta, key)=>{
+    const { tipo, label, entries } = grupoMeta;
+
+    if(filtroGrupoTipo !== 'todos' && filtroGrupoTipo !== tipo) return;
+
+    const grupoId = key;
+
+    const trHeader = document.createElement('tr');
+    trHeader.dataset.grupo = grupoId;
+    trHeader.dataset.row = 'header';
+
+    const tdHeader = document.createElement('td');
+    tdHeader.colSpan = 16;
+    tdHeader.innerHTML = `
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        padding:4px 6px;
+        background:#eef2ff;
+        border-radius:6px;
+        font-size:12px;
+        font-weight:600;
+      ">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button type="button"
+            class="btn-toggle-grupo"
+            data-grupo="${grupoId}"
+            style="border:none;background:none;cursor:pointer;font-size:14px;line-height:1;">
+            ▾
+          </button>
+          <span>${label || '(Sem grupo)'} 
+            <span style="font-weight:400;color:#64748b;margin-left:4px;">
+              ${tipo === 'produto' ? 'Produto acabado' : (tipo === 'vidro' ? 'Vidro' : 'Insumos')}
+            </span>
+          </span>
+        </div>
+      </div>
+    `;
+    trHeader.appendChild(tdHeader);
+    tbody.appendChild(trHeader);
+
+    entries.forEach(({ idx, item })=>{
+      const tr = document.createElement('tr');
+      tr.dataset.grupo = grupoId;
+      tr.dataset.row = 'item';
+
+      const td = (html)=>{ const el=document.createElement('td'); el.innerHTML=html; return el; };
+
+      const text   = (val)=> `<div class="cell"><input type="text" value="${val??''}"/></div>`;
+      const num    = (val)=> `<div class="cell"><input type="number" step="1" min="0" value="${val??''}"/></div>`;
+      const date   = (val)=> `<div class="cell"><input type="date" value="${toISODate(val)}"/></div>`;
+      const money  = (val)=> `<div class="cell"><input class="money" type="text" inputmode="decimal" value="${fmtBRL(val||0)}"/></div>`;
+      const tipoSel   = (val)=> `
+        <div class="cell">
+          <select data-free="1">
+            ${['Reto','Inclinado','Croqui'].map(opt=>`<option ${String(val||'').toLowerCase()===opt.toLowerCase()?'selected':''}>${opt}</option>`).join('')}
+          </select>
+        </div>`;
+      const fatur  = (val)=> `
+        <div class="cell">
+          <select data-free="1">
+            ${['Ferreira Ulhoa','Direto'].map(opt=>`<option ${String(val||'').toLowerCase()===opt.toLowerCase()?'selected':''}>${opt}</option>`).join('')}
+            <option value="${val??''}" ${val && !['ferreira ulhoa','direto'].includes(String(val).toLowerCase())?'selected':''}>${val??''}</option>
+          </select>
+        </div>`;
+
+      tr.appendChild(td(text(item.vidro||'')));                     tr.lastChild.setAttribute('data-k','vidro');
+      tr.appendChild(td(tipoSel(item.tipo||'Reto')));               tr.lastChild.setAttribute('data-k','tipo');
+      tr.appendChild(td(num(item.quantidade??'')));                 tr.lastChild.setAttribute('data-k','quantidade');
+      tr.appendChild(td(date(item.orcamentoEnviado)));              tr.lastChild.setAttribute('data-k','orcamentoEnviado');
+      tr.appendChild(td(date(item.aprovacao)));                     tr.lastChild.setAttribute('data-k','aprovacao');
+      tr.appendChild(td(date(item.moldeEnviado)));                  tr.lastChild.setAttribute('data-k','moldeEnviado');
+      tr.appendChild(td(date(item.recebemosLinkPagamento)));        tr.lastChild.setAttribute('data-k','recebemosLinkPagamento');
+      tr.appendChild(td(date(item.pagemento||item.pagamento)));     tr.lastChild.setAttribute('data-k','pagamento');
+      tr.appendChild(td(date(item.previsao)));                      tr.lastChild.setAttribute('data-k','previsao');
+      tr.appendChild(td(text(item.numeroPedidoFornecedor||'')));    tr.lastChild.setAttribute('data-k','numeroPedidoFornecedor');
+      tr.appendChild(td(text(item.numeroOrcFornecedor||'')));       tr.lastChild.setAttribute('data-k','numeroOrcFornecedor');
+      tr.appendChild(td(date(item.vidrosProntos)));                 tr.lastChild.setAttribute('data-k','vidrosProntos');
+      tr.appendChild(td(date(item.naEmpresa)));                     tr.lastChild.setAttribute('data-k','naEmpresa');
+      tr.appendChild(td(fatur(item.faturamento||'Ferreira Ulhoa')));tr.lastChild.setAttribute('data-k','faturamento');
+      tr.appendChild(td(money(item.valorReal||0)));                 tr.lastChild.setAttribute('data-k','valorReal');
+
+      const tdAcoes = document.createElement('td');
+      tdAcoes.innerHTML = `
+        <button type="button" class="btn btn-danger btn-icon" data-remove>
+          ✕ Remover
+        </button>
+      `;
+      tr.appendChild(tdAcoes);
+
+      tbody.appendChild(tr);
+
+      tr.querySelectorAll('td').forEach(tdEl=>{
+        const k = tdEl.getAttribute('data-k');
+        const inp = tdEl.querySelector('input, select');
+        if(!k || !inp) return;
+
+        if(inp.tagName==='SELECT' && inp.dataset.free === '1'){
+          inp.addEventListener('change', ()=>{
+            itens[idx][k] = inp.value;
+          });
+        }else if(inp.type==='date'){
+          inp.addEventListener('change', ()=>{
+            itens[idx][k] = toISODate(inp.value) || '';
+            atualizarPrevisaoCabecalho();
+          });
+        }else if(k==='quantidade'){
+          inp.addEventListener('change', ()=>{
+            itens[idx][k] = Number(inp.value||0);
+          });
+        }else if(k==='valorReal'){
+          inp.addEventListener('change', ()=>{
+            const n = moneyToNumber(inp.value);
+            itens[idx][k] = n;
+            inp.value = fmtBRL(n);
+            recalcularTotaisLocais();
+          });
+          inp.addEventListener('blur', ()=>{ inp.value = fmtBRL(moneyToNumber(inp.value)); });
+          inp.addEventListener('focus', ()=> inp.select());
+        }else{
+          inp.addEventListener('change', ()=>{ itens[idx][k] = inp.value; });
+        }
+      });
+
+      const btnRem = tr.querySelector('[data-remove]');
+      if(btnRem){
+        btnRem.addEventListener('click', ()=>{
+          const removed = itens[idx];
+          if(removed && removed._id){
+            itensRemovidosIds.add(removed._id);
+          }
+          itens.splice(idx,1);
+          renderTabela();
+          recalcularTotaisLocais();
+          atualizarPrevisaoCabecalho();
+        });
+      }
+    });
   });
 
   $('#t-itens').textContent = itens.length;
-
-  // total local (grade)
   $('#tfoot-total').textContent       = fmtBRL(totalReal);
-  // Valor real (total) na caixa também reflete a soma atual dos itens
   $('#t-valor-real-total').textContent = fmtBRL(totalReal);
+
+  tbody.querySelectorAll('.btn-toggle-grupo').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const grupoId = btn.getAttribute('data-grupo');
+      const collapsed = btn.getAttribute('data-collapsed') === '1';
+      btn.setAttribute('data-collapsed', collapsed ? '0' : '1');
+      btn.textContent = collapsed ? '▾' : '▸';
+
+      tbody.querySelectorAll(`tr[data-grupo="${grupoId}"][data-row="item"]`)
+        .forEach(tr=>{
+          tr.style.display = collapsed ? '' : 'none';
+        });
+    });
+  });
 }
 
-// só recalcula os totais locais quando mexe em valorReal, sem mexer nos campos do server
 function recalcularTotaisLocais(){
   const totalReal = itens.reduce((acc,i)=> acc + Number(i.valorReal||0), 0);
   $('#tfoot-total').textContent       = fmtBRL(totalReal);
@@ -530,72 +603,6 @@ function atualizarPrevisaoCabecalho(){
   $('#p-previsao').textContent = prevMax ? new Date(prevMax).toLocaleDateString('pt-BR') : '—';
 }
 
-async function carregar(){
-  const numeroPedido = getPedidoParam();
-  if(!numeroPedido){ alert('Pedido não informado'); return; }
-
-  setStatus('carregando…');
-
-  const urlItens = new URL(`${BASE_URL}/api/produtos`);
-  urlItens.searchParams.set('limit','2000');
-  urlItens.searchParams.set('numeroPedido', numeroPedido);
-
-  try{
-    const r = await fetch(urlItens);
-    const j = await r.json();
-    if(!j.ok){ setStatus('erro'); alert(j.error||'Falha ao carregar pedido'); return; }
-
-    const todos = Array.isArray(j.data) ? j.data : [];
-    const numeroPedidoStr = String(numeroPedido);
-
-    // filtra pelo nº do pedido E remove "Mão de Obra de Instalação (por Hora)"
-    itens = todos
-      .filter(d => String(d.numeroPedido || '') === numeroPedidoStr)
-      .filter(d => !isMaoDeObraHora(d));
-
-    const first = itens[0] || todos.find(d => String(d.numeroPedido||'')===numeroPedidoStr) || {};
-    cabecalho.numeroPedido = numeroPedido;
-    cabecalho.cliente      = first.cliente   || '';
-    cabecalho.fornecedor   = first.fornecedor|| '';
-    cabecalho.vendedor     = first.vendedor  || first.responsavel || '';
-    cabecalho.observacao   = first.observacao || '';
-    cabecalho.numeroNF     = first.numeroNotaFiscal || '';
-    cabecalho.formaPagamento = first.formaPagamento || '';
-
-    $('#titulo').textContent = `Pedido ${numeroPedido}`;
-    $('#p-numero').value     = cabecalho.numeroPedido;
-    $('#p-cliente').value    = cabecalho.cliente;
-    $('#p-fornecedor').value = cabecalho.fornecedor;
-    $('#p-vendedor').value   = cabecalho.vendedor;
-    $('#p-observacao-input').value = cabecalho.observacao;
-    $('#nf-numero').value    = cabecalho.numeroNF;
-    $('#forma-pag').value    = cabecalho.formaPagamento;
-
-    // Totais vindos do SERVER
-    totaisSistema.valorTotalPedido             = Number(first.valorTotalPedido||0);
-    totaisSistema.valorFaturamentoDiretoOrcado = Number(first.valorTotalFaturamentoDiretoOrcado||0);
-    totaisSistema.valorAproximadoUF            = Number(first.valorAproximadoUF||0);
-    totaisSistema.valorNFProdutos              = Number(first.valorTotalNFProdutos||0);
-    totaisSistema.valorNFServicos              = Number(first.valorTotalNFServicos||0);
-    totaisSistema.residuoDiferencaFaturamentoServico = Number(first.residuoDiferencaFaturamentoServico||0);
-
-    $('#t-valor-total-pedido').textContent = fmtBRL(totaisSistema.valorTotalPedido);
-    $('#t-valor-fatur-direto').textContent = fmtBRL(totaisSistema.valorFaturamentoDiretoOrcado);
-    $('#t-valor-uf').textContent           = fmtBRL(totaisSistema.valorAproximadoUF);
-    $('#t-nf-produtos').textContent        = fmtBRL(totaisSistema.valorNFProdutos);
-    $('#t-nf-servicos').textContent        = fmtBRL(totaisSistema.valorNFServicos);
-    $('#t-dif-fatur-serv').textContent     = fmtBRL(totaisSistema.residuoDiferencaFaturamentoServico);
-
-    atualizarPrevisaoCabecalho();
-    renderTabela();
-    setStatus('ok');
-  }catch(e){
-    console.error(e);
-    setStatus('erro');
-    alert('Não foi possível carregar o pedido.');
-  }
-}
-
 // Eventos do cabeçalho
 $('#p-numero').addEventListener('change', e=>{ cabecalho.numeroPedido = e.target.value.trim(); });
 $('#p-fornecedor').addEventListener('change', e=>{ cabecalho.fornecedor = e.target.value.trim(); });
@@ -603,7 +610,7 @@ $('#p-observacao-input').addEventListener('input', e=>{ cabecalho.observacao = e
 $('#nf-numero').addEventListener('input', e=>{ cabecalho.numeroNF = e.target.value; });
 $('#forma-pag').addEventListener('change', e=>{ cabecalho.formaPagamento = e.target.value; });
 
-// ===== INCLUIR NOVO ITEM =====
+// novo item manual
 document.getElementById('btn-add-item')?.addEventListener('click', ()=>{
   const numeroPedido = cabecalho.numeroPedido || getPedidoParam();
   const novo = {
@@ -611,6 +618,7 @@ document.getElementById('btn-add-item')?.addEventListener('click', ()=>{
     cliente: cabecalho.cliente,
     fornecedor: cabecalho.fornecedor,
     vendedor: cabecalho.vendedor,
+
     vidro: '',
     tipo: 'Reto',
     quantidade: 0,
@@ -625,14 +633,17 @@ document.getElementById('btn-add-item')?.addEventListener('click', ()=>{
     vidrosProntos: '',
     naEmpresa: '',
     faturamento: 'Ferreira Ulhoa',
-    valorReal: 0
+    valorReal: 0,
+
+    grupoNome: 'Manual',
+    grupoTipo: 'outro'
   };
   itens.push(novo);
   renderTabela();
   atualizarPrevisaoCabecalho();
 });
 
-// ===== SALVAR ALTERAÇÕES =====
+// salvar
 async function salvarAlteracoes(){
   if(!Array.isArray(itens)){
     alert('Nenhum item para salvar.');
@@ -642,7 +653,6 @@ async function salvarAlteracoes(){
   try{
     let okCount = 0;
 
-    // 1) Deletar itens removidos
     for (const id of itensRemovidosIds){
       try{
         await fetch(`${BASE_URL}/api/produtos/${id}`, {
@@ -654,12 +664,10 @@ async function salvarAlteracoes(){
     }
     itensRemovidosIds.clear();
 
-    // 2) Salvar / atualizar itens atuais
     for(const it of itens){
       const {_id, createdAt, updatedAt, __v, ...rest} = it;
       const clone = { ...rest };
 
-      // garante infos de cabeçalho
       clone.numeroPedido = cabecalho.numeroPedido || clone.numeroPedido;
       clone.cliente      = cabecalho.cliente      || clone.cliente;
       clone.fornecedor   = cabecalho.fornecedor   || clone.fornecedor;
@@ -674,7 +682,6 @@ async function salvarAlteracoes(){
       if(cabecalho.emailFornecedor)    clone.meta.emailFornecedor    = cabecalho.emailFornecedor;
       if(cabecalho.codigoFornecedorOmie) clone.meta.codigoFornecedorOmie = cabecalho.codigoFornecedorOmie;
 
-      // se tiver _id -> PUT (update), se não -> POST (novo)
       if(_id){
         const r = await fetch(`${BASE_URL}/api/produtos/${_id}`, {
           method:'PUT',
@@ -693,7 +700,7 @@ async function salvarAlteracoes(){
         if(j.ok){
           okCount++;
           if(j.data && j.data._id){
-            it._id = j.data._id; // atualiza no array local
+            it._id = j.data._id;
           }
         }
       }
@@ -709,6 +716,235 @@ async function salvarAlteracoes(){
 }
 
 document.getElementById('btn-salvar')?.addEventListener('click', salvarAlteracoes);
+
+// barra filtros (produto acabado / vidro)
+(function initBarraFiltros(){
+  const wrap = document.querySelector('.table-wrap');
+  if(!wrap) return;
+
+  const barra = document.createElement('div');
+  barra.style.cssText = `
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+    margin:8px 0 4px;
+    font-size:12px;
+  `;
+  barra.innerHTML = `
+    <span style="color:#64748b;">Filtrar grupos:</span>
+    <button type="button" class="btn btn-icon" data-filter="todos">Todos</button>
+    <button type="button" class="btn btn-icon" data-filter="produto">Estrutura (produtos acabados)</button>
+    <button type="button" class="btn btn-icon" data-filter="vidro">Vidro</button>
+  `;
+
+  wrap.parentNode.insertBefore(barra, wrap);
+
+  barra.querySelectorAll('button[data-filter]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      filtroGrupoTipo = btn.getAttribute('data-filter') || 'todos';
+      renderTabela();
+    });
+  });
+})();
+
+// carregar pedido + proposta + insumos
+async function carregar(){
+  const numeroPedido = getPedidoParam();
+  if(!numeroPedido){
+    alert('Pedido não informado');
+    return;
+  }
+  const numeroPedidoStr = String(numeroPedido);
+
+  setStatus('carregando…');
+ 
+
+  const urlItens = new URL(`${BASE_URL}/api/produtos`);
+  urlItens.searchParams.set('limit','2000');
+  urlItens.searchParams.set('numeroPedido', numeroPedidoStr);
+
+  try{
+    const [rProd, rPropAll] = await Promise.all([
+      fetch(urlItens),
+      fetch(PROPOSTAS_URL)
+    ]);
+
+    // ----- produtos do pedido (server vidro) -----
+    const jProd = await rProd.json();
+    if(!jProd.ok){
+      console.warn('Falha ao carregar produtos do pedido', jProd);
+    }
+    const docsPedido = Array.isArray(jProd.data)
+      ? jProd.data.filter(d => String(d.numeroPedido || '') === numeroPedidoStr)
+      : [];
+
+    const first = docsPedido[0] || {};
+
+    // set nomes dos produtos acabados presentes (campo vidro)
+    nomesProdutosPedido = new Set();
+    docsPedido.forEach(d=>{
+      const nome = (d.vidro || '').trim();
+      if(nome) nomesProdutosPedido.add(nome.toLowerCase());
+    });
+
+    // cabeçalho a partir do PedidoVidro
+    cabecalho.numeroPedido = numeroPedidoStr;
+    cabecalho.cliente      = first.cliente   || '';
+    cabecalho.fornecedor   = first.fornecedor|| '';
+    cabecalho.vendedor     = first.vendedor  || first.responsavelVendedor || '';
+
+    cabecalho.observacao   = first.observacao || '';
+    cabecalho.numeroNF     = first.numeroNotaFiscal || '';
+    cabecalho.formaPagamento = first.formaPagamento || '';
+
+    $('#titulo').textContent = `Pedido ${numeroPedidoStr}`;
+    $('#p-numero').value     = cabecalho.numeroPedido;
+    $('#p-cliente').value    = cabecalho.cliente;
+    $('#p-fornecedor').value = cabecalho.fornecedor;
+    $('#p-vendedor').value   = cabecalho.vendedor;
+    $('#p-observacao-input').value = cabecalho.observacao;
+    $('#nf-numero').value    = cabecalho.numeroNF;
+    $('#forma-pag').value    = cabecalho.formaPagamento;
+
+    totaisSistema.valorTotalPedido             = Number(first.valorTotalPedido||0);
+    totaisSistema.valorFaturamentoDiretoOrcado = Number(first.valorTotalFaturamentoDiretoOrcado||0);
+    totaisSistema.valorAproximadoUF            = Number(first.valorAproximadoUF||0);
+    totaisSistema.valorNFProdutos              = Number(first.valorTotalNFProdutos||0);
+    totaisSistema.valorNFServicos              = Number(first.valorTotalNFServicos||0);
+    totaisSistema.residuoDiferencaFaturamentoServico = Number(first.residuoDiferencaFaturamentoServico||0);
+
+    $('#t-valor-total-pedido').textContent = fmtBRL(totaisSistema.valorTotalPedido);
+    $('#t-valor-fatur-direto').textContent = fmtBRL(totaisSistema.valorFaturamentoDiretoOrcado);
+    $('#t-valor-uf').textContent           = fmtBRL(totaisSistema.valorAproximadoUF);
+    $('#t-nf-produtos').textContent        = fmtBRL(totaisSistema.valorNFProdutos);
+    $('#t-nf-servicos').textContent        = fmtBRL(totaisSistema.valorNFServicos);
+    $('#t-dif-fatur-serv').textContent     = fmtBRL(totaisSistema.residuoDiferencaFaturamentoServico);
+
+    // ----- propostas (server proposta) -----
+    if(!rPropAll.ok){
+      console.warn('Falha ao carregar lista de propostas', rPropAll.status);
+      itens = [];
+      atualizarPrevisaoCabecalho();
+      renderTabela();
+      setStatus('ok');
+      return;
+    }
+
+    const rawProp = await rPropAll.json();
+    const listaPropostas = Array.isArray(rawProp)
+      ? rawProp
+      : (rawProp && Array.isArray(rawProp.data) ? rawProp.data : []);
+
+    const proposta = listaPropostas.find(p=>{
+      const n1 = p.numeroProposta;
+      const n2 = p.camposFormulario && p.camposFormulario.numeroOrcamento;
+      return String(n1||'') === numeroPedidoStr || String(n2||'') === numeroPedidoStr;
+    });
+
+    if(!proposta){
+      alert('Não encontrei proposta com este número. Vou carregar apenas o cabeçalho do pedido.');
+      itens = [];
+      atualizarPrevisaoCabecalho();
+      renderTabela();
+      setStatus('ok');
+      return;
+    }
+
+    const cf = proposta.camposFormulario || {};
+    const grupos = Array.isArray(proposta.grupos) ? proposta.grupos : [];
+    const previsaoGlobal = Array.isArray(cf.parcelas) && cf.parcelas.length
+      ? cf.parcelas[0].data
+      : '';
+
+    itens = [];
+
+    grupos.forEach(grupo=>{
+      const itensGrupo = Array.isArray(grupo.itens) ? grupo.itens : [];
+      if(!itensGrupo.length) return;
+
+      const produtoCab = itensGrupo.find(ins => String(ins.descricao_utilizacao || '').trim() === 'Produto Acabado');
+
+      let grupoTipo = 'outro';
+      if (produtoCab) grupoTipo = 'produto';
+      else if (String(grupo.nome || '').trim().toLowerCase() === 'vidro') grupoTipo = 'vidro';
+
+      const grupoLabelBase = produtoCab
+        ? (produtoCab.nome_produto || grupo.nome || '')
+        : (grupo.nome || '');
+
+      // ---- filtro: só grupos presentes no PedidoVidro ----
+      let deveIncluir = false;
+      if (produtoCab){
+        const nomePA = String(produtoCab.nome_produto || '').trim().toLowerCase();
+        if (nomesProdutosPedido.size === 0 || nomesProdutosPedido.has(nomePA)){
+          deveIncluir = true;
+        }
+      } else {
+        const nomeGrupo = String(grupo.nome || '').trim().toLowerCase();
+        if (nomeGrupo === 'vidro' && nomesProdutosPedido.size > 0){
+          deveIncluir = true;
+        }
+      }
+      if (!deveIncluir) return;
+      // -----------------------------------------------
+
+      itensGrupo.forEach(ins=>{
+        const nomeProduto = String(ins.nome_produto || '').trim();
+        const descUtil    = String(ins.descricao_utilizacao || '').trim();
+
+        if (isMaoDeObraHoraNome(nomeProduto)) return;     // não mostra Mão de Obra
+        if (descUtil === 'Produto Acabado') return;        // não mostra o Produto Acabado em si
+
+        itens.push({
+          numeroPedido: cabecalho.numeroPedido,
+          cliente:      cabecalho.cliente,
+          fornecedor:   cabecalho.fornecedor,
+          vendedor:     cabecalho.vendedor,
+
+          vidro:        nomeProduto,
+          tipo:         descUtil || 'Reto',
+          quantidade:   ins.quantidade ?? 0,              // quantidade mesmo, não quantidade_desejada
+
+          orcamentoEnviado: '',
+          aprovacao:        '',
+          moldeEnviado:     '',
+          recebemosLinkPagamento: '',
+          pagamento:        '',
+          previsao:         previsaoGlobal || '',
+          numeroPedidoFornecedor: '',
+          numeroOrcFornecedor:   '',
+          vidrosProntos: '',
+          naEmpresa:     '',
+          faturamento:   'Ferreira Ulhoa',
+          valorReal:     ins.custo || 0,
+
+          grupoNome: grupoLabelBase,
+          grupoTipo,
+
+          meta: {
+            grupoNome:           grupoLabelBase,
+            codigoOmie:          ins.codigo_omie || '',
+            quantidadeOriginal:  ins.quantidade,
+            quantidadeDesejada:  ins.quantidade_desejada
+          }
+        });
+      });
+    });
+
+    atualizarPrevisaoCabecalho();
+    renderTabela();
+    setStatus('ok');
+    
+  }catch(e){
+    console.error(e);
+    setStatus('erro');
+    alert('Não foi possível carregar o pedido.');
+  }
+}
+
+// boot
+carregar();
 </script>
 
 <script>
@@ -804,7 +1040,6 @@ function aplicarFornecedorSelecionado(nome){
   cabecalho.codigoFornecedorOmie = forn.codigo_cliente_omie || '';
 }
 
-// Fornecedor: datalist + sugestão + preencher dados
 let sugTimer = null;
 const inpFornecedor = document.getElementById('p-fornecedor');
 
@@ -827,10 +1062,12 @@ if (inpFornecedor){
   inpFornecedor.addEventListener('blur', aplicar);
 }
 
-// boot
 carregarPessoas();
-carregar();
+
+
 </script>
+
+
 
 </body>
 </html>
