@@ -485,7 +485,7 @@ let itens = [];
 let itensRemovidosIds = new Set();
 let filtroGrupoTipo = 'todos'; // 'todos' | 'produto' | 'vidro'
 
-// nomes de Produto Acabado presentes no pedido (campo vidro do PedidoVidro)
+// nomes de vidros/insumos presentes na rota de vidros (Heroku)
 let nomesProdutosPedido = new Set();
 
 let cabecalho = {
@@ -758,20 +758,29 @@ async function salvarAlteracoes(){
     return;
   }
   setStatus('salvando…');
+  console.log('💾 Iniciando salvarAlteracoes, itens atuais:', itens);
+
   try{
     let okCount = 0;
 
+    // deletes
+    console.log('🗑 Itens a deletar (ids):', Array.from(itensRemovidosIds));
     for (const id of itensRemovidosIds){
       try{
-        await fetch(`${BASE_URL}/api/produtos/${id}`, {
+        const urlDel = `${BASE_URL}/api/produtos/${id}`;
+        console.log('🗑 [DELETE] Chamando:', urlDel);
+        const respDel = await fetch(urlDel, {
           method:'DELETE'
         });
+        const bodyDel = await respDel.text().catch(()=>null);
+        console.log('🗑 [DELETE] Resposta:', { status: respDel.status, body: bodyDel });
       }catch(e){
-        console.warn('Erro ao deletar item', id, e);
+        console.error('❌ Erro ao deletar item', id, e);
       }
     }
     itensRemovidosIds.clear();
 
+    // upserts
     for(const it of itens){
       const {_id, createdAt, updatedAt, __v, ...rest} = it;
       const clone = { ...rest };
@@ -814,20 +823,26 @@ async function salvarAlteracoes(){
       if(cabecalho.codigoFornecedorOmie) clone.meta.codigoFornecedorOmie = cabecalho.codigoFornecedorOmie;
 
       if(_id){
-        const r = await fetch(`${BASE_URL}/api/produtos/${_id}`, {
+        const urlPut = `${BASE_URL}/api/produtos/${_id}`;
+        console.log('✏️ [PUT] Salvando item existente:', { url: urlPut, payload: clone });
+        const r = await fetch(urlPut, {
           method:'PUT',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify(clone)
         });
-        const j = await r.json();
+        const j = await r.json().catch(()=>({ raw: 'não foi possível parsear JSON' }));
+        console.log('📥 [PUT] Resposta:', { status: r.status, body: j });
         if(j.ok) okCount++;
       }else{
-        const r = await fetch(`${BASE_URL}/api/produtos`, {
+        const urlPost = `${BASE_URL}/api/produtos`;
+        console.log('➕ [POST] Criando novo item:', { url: urlPost, payload: clone });
+        const r = await fetch(urlPost, {
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify(clone)
         });
-        const j = await r.json();
+        const j = await r.json().catch(()=>({ raw: 'não foi possível parsear JSON' }));
+        console.log('📥 [POST] Resposta:', { status: r.status, body: j });
         if(j.ok){
           okCount++;
           if(j.data && j.data._id){
@@ -838,9 +853,10 @@ async function salvarAlteracoes(){
     }
 
     alert(`✅ ${okCount} item(ns) salvo(s) com sucesso.`);
+    console.log('✅ salvarAlteracoes concluído. Itens salvos com sucesso:', okCount);
     setStatus('ok');
   }catch(err){
-    console.error(err);
+    console.error('💥 Erro em salvarAlteracoes:', err);
     setStatus('erro');
     alert('Erro ao salvar alterações: ' + err.message);
   }
@@ -889,19 +905,28 @@ async function carregar(){
   const numeroPedidoStr = String(numeroPedido);
 
   setStatus('carregando…');
+  console.log('🔄 carregar() iniciado para pedido:', numeroPedidoStr);
 
   const urlItens = new URL(`${BASE_URL}/api/produtos`);
   urlItens.searchParams.set('limit','2000');
   urlItens.searchParams.set('numeroPedido', numeroPedidoStr);
 
   try{
+    console.log('🔎 [GET] Produtos do pedido:', urlItens.toString());
+    console.log('🔎 [GET] Propostas da API:', PROPOSTAS_URL);
+
     const [rProd, rPropAll] = await Promise.all([
       fetch(urlItens),
       fetch(PROPOSTAS_URL)
     ]);
 
+    console.log('📡 [GET] /api/produtos status:', rProd.status);
+    console.log('📡 [GET] /api/propostas status:', rPropAll.status);
+
     // ----- produtos do pedido (server vidro) -----
-    const jProd = await rProd.json();
+    const jProd = await rProd.json().catch(()=>({ raw:'não foi possível parsear JSON de produtos' }));
+    console.log('📥 Resposta produtos (PedidoVidro):', jProd);
+
     if(!jProd.ok){
       console.warn('Falha ao carregar produtos do pedido', jProd);
     }
@@ -909,14 +934,17 @@ async function carregar(){
       ? jProd.data.filter(d => String(d.numeroPedido || '') === numeroPedidoStr)
       : [];
 
+    console.log('📊 docsPedido filtrados pelo numeroPedido:', docsPedido);
+
     const first = docsPedido[0] || {};
 
-    // set nomes dos produtos acabados presentes (campo vidro)
+    // nomes de vidros/insumos presentes na rota de vidros (Heroku)
     nomesProdutosPedido = new Set();
     docsPedido.forEach(d=>{
       const nome = (d.vidro || '').trim();
       if(nome) nomesProdutosPedido.add(nome.toLowerCase());
     });
+    console.log('🧾 nomesProdutosPedido (SET):', nomesProdutosPedido);
 
     // cabeçalho a partir do PedidoVidro
     cabecalho.numeroPedido = numeroPedidoStr;
@@ -962,16 +990,22 @@ async function carregar(){
       return;
     }
 
-    const rawProp = await rPropAll.json();
+    const rawProp = await rPropAll.json().catch(()=>({ raw:'não foi possível parsear JSON de propostas' }));
+    console.log('📥 Resposta propostas (listaPropostas bruto):', rawProp);
+
     const listaPropostas = Array.isArray(rawProp)
       ? rawProp
       : (rawProp && Array.isArray(rawProp.data) ? rawProp.data : []);
+
+    console.log('📊 listaPropostas normalizada:', listaPropostas);
 
     const proposta = listaPropostas.find(p=>{
       const n1 = p.numeroProposta;
       const n2 = p.camposFormulario && p.camposFormulario.numeroOrcamento;
       return String(n1||'') === numeroPedidoStr || String(n2||'') === numeroPedidoStr;
     });
+
+    console.log('🔎 Proposta selecionada para o pedido:', proposta);
 
     if(!proposta){
       alert('Não encontrei proposta com este número. Vou carregar apenas o cabeçalho do pedido.');
@@ -988,6 +1022,9 @@ async function carregar(){
     const previsaoGlobal = Array.isArray(cf.parcelas) && cf.parcelas.length
       ? cf.parcelas[0].data
       : '';
+
+    console.log('🧩 grupos da proposta:', grupos);
+    console.log('📅 previsaoGlobal da proposta:', previsaoGlobal);
 
     itens = [];
 
@@ -1018,6 +1055,8 @@ async function carregar(){
           deveIncluir = true;
         }
       }
+      console.log('📦 Grupo analisado:', { grupoNome: grupoLabelBase, grupoTipo, deveIncluir });
+
       if (!deveIncluir) return;
       // -----------------------------------------------
 
@@ -1025,10 +1064,23 @@ async function carregar(){
         const nomeProduto = String(ins.nome_produto || '').trim();
         const descUtil    = String(ins.descricao_utilizacao || '').trim();
 
-        if (isMaoDeObraHoraNome(nomeProduto)) return;     // não mostra Mão de Obra
-        if (descUtil === 'Produto Acabado') return;       // não mostra o Produto Acabado em si
+        // PRIORIDADE DA ROTA DE VIDROS (HEROKU)
+        if (nomesProdutosPedido.size > 0 &&
+            !nomesProdutosPedido.has(nomeProduto.toLowerCase())) {
+          console.log('⏭ Insumo ignorado (não está em nomesProdutosPedido):', nomeProduto);
+          return;
+        }
 
-        itens.push({
+        if (isMaoDeObraHoraNome(nomeProduto)) {
+          console.log('⏭ Insumo ignorado (Mão de Obra por hora):', nomeProduto);
+          return;
+        }
+        if (descUtil === 'Produto Acabado') {
+          console.log('⏭ Ignorando linha Produto Acabado dentro do grupo:', nomeProduto);
+          return;
+        }
+
+        const itemPush = {
           numeroPedido: cabecalho.numeroPedido,
           cliente:      cabecalho.cliente,
           fornecedor:   cabecalho.fornecedor,
@@ -1063,17 +1115,23 @@ async function carregar(){
             quantidadeOriginal:  ins.quantidade,
             quantidadeDesejada:  ins.quantidade_desejada
           }
-        });
+        };
+
+        console.log('➕ Adicionando item convertido da proposta para tabela:', itemPush);
+        itens.push(itemPush);
       });
     });
+
+    console.log('📋 itens finais depois do carregar():', itens);
 
     atualizarPrevisaoCabecalho();
     renderTabela();
     recalcularTotaisLocais();
     setStatus('ok');
+    console.log('✅ carregar() finalizado com sucesso.');
     
   }catch(e){
-    console.error(e);
+    console.error('💥 Erro em carregar():', e);
     setStatus('erro');
     alert('Não foi possível carregar o pedido.');
   }
@@ -1097,6 +1155,7 @@ function initTotaisInputs(){
       const num = moneyToNumber(e.target.value);
       totaisSistema[key] = num;
       e.target.value = fmtBRL(num);
+      console.log('✏️ Total editado:', { campo: key, valor: num });
     });
     el.addEventListener('blur', e=>{
       const num = moneyToNumber(e.target.value);
@@ -1123,6 +1182,13 @@ function initPopupResiduo(){
     const fatDir    = totaisSistema.valorFaturamentoDiretoOrcado || 0;
     const nfServ    = totaisSistema.valorNFServicos || 0;
     const residCalc = fatDir + nfServ - totalReal;
+
+    console.log('ℹ️ Abrindo popup resquício com dados:', {
+      totalReal,
+      faturamentoDireto: fatDir,
+      nfServicos: nfServ,
+      residCalc
+    });
 
     if(formulaEl){
       formulaEl.textContent = `${fmtBRL(fatDir)} + ${fmtBRL(nfServ)} − ${fmtBRL(totalReal)} = ${fmtBRL(residCalc)}`;
@@ -1163,7 +1229,6 @@ function initPopupResiduo(){
         return;
       }
 
-      // Usa o mesmo mapa de pessoas do restante da tela
       const pessoa = (typeof mapaFornecedoresPorNome !== 'undefined')
         ? mapaFornecedoresPorNome.get(nomeCliente)
         : null;
@@ -1176,7 +1241,7 @@ function initPopupResiduo(){
         observacao: `Resquício do pedido ${cabecalho.numeroPedido}`
       };
 
-      console.log('📤 Payload resquício pronto para envio:', payload);
+      console.log('📤 Payload resquício pronto para envio (front):', payload);
       alert('Resquício preparado. Veja os detalhes no console para integrar com seu backend/Omie.');
 
       popup.style.display = 'none';
@@ -1228,9 +1293,16 @@ const norm = (s)=> String(s||'')
 
 async function carregarPessoas(){
   try{
+    console.log('🔎 [GET] Pessoas (clientes/fornecedores):', PESSOAS_URL);
     const r = await fetch(PESSOAS_URL);
-    const data = await r.json();
-    if(!Array.isArray(data)) return;
+    console.log('📡 [GET] Pessoas status:', r.status);
+    const data = await r.json().catch(()=>({ raw: 'não foi possível parsear JSON de pessoas' }));
+    console.log('📥 Resposta pessoas (bruto):', data);
+
+    if(!Array.isArray(data)) {
+      console.warn('⚠️ Resposta de pessoas não é array.');
+      return;
+    }
 
     cachePessoas = data;
     mapaFornecedoresPorNome.clear();
@@ -1240,6 +1312,7 @@ async function carregarPessoas(){
       if(!nome) return;
       mapaFornecedoresPorNome.set(nome, p);
     });
+    console.log('📊 Pessoas carregadas (qtde):', cachePessoas.length);
 
     preencherDatalist('lista-fornecedores', cachePessoas);
     // também alimenta o datalist do popup de resquício
@@ -1275,7 +1348,12 @@ function sugerirPorTexto(q){
 function aplicarFornecedorSelecionado(nome){
   if(!nome) return;
   const forn = mapaFornecedoresPorNome.get(nome);
-  if(!forn) return;
+  if(!forn) {
+    console.log('⚠️ Nenhum fornecedor encontrado com este nome:', nome);
+    return;
+  }
+
+  console.log('✅ Fornecedor selecionado:', forn);
 
   const inpF    = document.getElementById('p-fornecedor');
   const inpTel  = document.getElementById('p-forn-telefone');
@@ -1305,6 +1383,8 @@ function aplicarFornecedorSelecionado(nome){
   cabecalho.telefoneFornecedor   = tel;
   cabecalho.emailFornecedor      = email;
   cabecalho.codigoFornecedorOmie = forn.codigo_cliente_omie || '';
+
+  console.log('✏️ Cabeçalho atualizado com fornecedor selecionado:', cabecalho);
 }
 
 let sugTimer = null;
@@ -1316,6 +1396,7 @@ if (inpFornecedor){
     clearTimeout(sugTimer);
     sugTimer = setTimeout(()=>{
       const sugestoes = sugerirPorTexto(q);
+      console.log('🔍 Sugestões de fornecedor para texto:', q, sugestoes);
       preencherDatalist('lista-fornecedores', sugestoes);
     }, 200);
   });
@@ -1344,6 +1425,7 @@ carregarPessoas();
     clearTimeout(timer);
     timer = setTimeout(()=>{
       const sugestoes = sugerirPorTexto(q);
+      console.log('🔍 Sugestões de cliente para resquício (texto):', q, sugestoes);
       preencherDatalist('lista-clientes-residuo', sugestoes);
     }, 200);
   });

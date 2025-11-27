@@ -9,7 +9,6 @@ dotenv.config();
 
 // ====== FALLBACKS (use .env em produção) ======
 const {
-  // use .env em produção; fallback local para desenvolvimento
   MONGO_URI = "mongodb://127.0.0.1:27017/proposta-db",
   PORT = 3000,
   OMIE_APP_KEY = "CHANGEME",
@@ -19,17 +18,22 @@ const {
 } = process.env;
 
 // ====== Conexão Mongo ======
+console.log("🔌 Iniciando conexão com MongoDB...");
 mongoose.set("strictQuery", true);
 mongoose
   .connect(MONGO_URI, { dbName: "proposta-db" })
-  .then(() => console.log("✅ MongoDB conectado"))
+  .then(() => {
+    console.log("✅ MongoDB conectado com sucesso");
+  })
   .catch((err) => {
     console.error("❌ Erro ao conectar no MongoDB:", err.message);
+    console.error(err);
     process.exit(1);
   });
 
 // ====== fetch (para Omie) ======
-const fetch = (...args) => import("node-fetch").then(({ default: f }) => f(...args));
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: f }) => f(...args));
 
 /* =======================
    Helpers de normalização
@@ -59,7 +63,7 @@ function toNumberBR(v) {
 /** Tenta parsear datas: aceita Date, ISO, "DD/MM/AAAA" */
 function parseDateFlexible(v) {
   if (!v) return undefined;
-  if (v instanceof Date && !isNaNaN(v)) return v;
+  if (v instanceof Date && !isNaN(v.getTime())) return v;
   const s = String(v).trim();
   const dm = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (dm) {
@@ -68,10 +72,10 @@ function parseDateFlexible(v) {
     const yRaw = parseInt(dm[3], 10);
     const y = yRaw < 100 ? 2000 + yRaw : yRaw;
     const dt = new Date(Date.UTC(y, m, d, 12, 0, 0));
-    return isNaN(dt) ? undefined : dt;
+    return isNaN(dt.getTime()) ? undefined : dt;
   }
   const dt = new Date(s);
-  return isNaN(dt) ? undefined : dt;
+  return isNaN(dt.getTime()) ? undefined : dt;
 }
 
 /** Converte Date/string → "DD/MM/AAAA" (Omie aceita esse formato) */
@@ -94,10 +98,20 @@ function computeDerived(doc) {
   const nfServ = Number(doc.valorTotalNFServicos) || 0;
   const real = Number(doc.valorReal) || 0;
 
-  doc.valorAproximadoUF = Number((pedido - fatDir).toFixed(2));
-  doc.residuoDiferencaFaturamentoServico = Number(
-    (fatDir + nfServ - real).toFixed(2)
-  );
+  const valorAproximadoUF = Number((pedido - fatDir).toFixed(2));
+  const residuo = Number((fatDir + nfServ - real).toFixed(2));
+
+  doc.valorAproximadoUF = valorAproximadoUF;
+  doc.residuoDiferencaFaturamentoServico = residuo;
+
+  console.log("🧮 computeDerived:", {
+    valorTotalPedido: pedido,
+    valorTotalFaturamentoDiretoOrcado: fatDir,
+    valorTotalNFServicos: nfServ,
+    valorReal: real,
+    valorAproximadoUF,
+    residuoDiferencaFaturamentoServico: residuo,
+  });
 }
 
 /* ===============
@@ -171,13 +185,23 @@ const PedidoVidroSchema = new mongoose.Schema(
 );
 
 PedidoVidroSchema.pre("save", function (next) {
+  console.log("🟡 [MONGO] pre-save chamado para documento:", {
+    _id: this._id,
+    numeroPedido: this.numeroPedido,
+    cliente: this.cliente,
+    vidro: this.vidro,
+  });
   computeDerived(this);
   next();
 });
 
 PedidoVidroSchema.pre("findOneAndUpdate", function (next) {
+  console.log("🟠 [MONGO] pre-findOneAndUpdate query:", this.getQuery());
   const update = this.getUpdate() || {};
   const target = update.$set ? update.$set : update;
+
+  console.log("🟠 [MONGO] pre-findOneAndUpdate update original:", update);
+
   this.model
     .findOne(this.getQuery())
     .then((doc) => {
@@ -194,10 +218,16 @@ PedidoVidroSchema.pre("findOneAndUpdate", function (next) {
             merged.residuoDiferencaFaturamentoServico;
         }
         this.setUpdate(update);
+        console.log("🟠 [MONGO] pre-findOneAndUpdate update final:", update);
+      } else {
+        console.log("🔍 [MONGO] pre-findOneAndUpdate: nenhum doc encontrado.");
       }
       next();
     })
-    .catch(next);
+    .catch((err) => {
+      console.error("❌ [MONGO] Erro no pre-findOneAndUpdate:", err);
+      next(err);
+    });
 });
 
 const PedidoVidro = mongoose.model("PedidoVidro", PedidoVidroSchema);
@@ -215,6 +245,8 @@ const PedidoVidro = mongoose.model("PedidoVidro", PedidoVidroSchema);
  * + normaliza strings / números / datas
  */
 function normalizeProdutoPayload(body = {}) {
+  console.log("🧾 [NORMALIZE] Body bruto recebido:", body);
+
   const payload = { ...body };
 
   payload.numeroPedido = cleanKey(payload.numeroPedido || "");
@@ -246,6 +278,7 @@ function normalizeProdutoPayload(body = {}) {
     payload.vidrosProntos = parseDateFlexible(payload.vidrosProntos);
   if (payload.naEmpresa) payload.naEmpresa = parseDateFlexible(payload.naEmpresa);
 
+  console.log("✅ [NORMALIZE] Payload normalizado:", payload);
   return payload;
 }
 
@@ -256,67 +289,154 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
+// Middleware simples de log de requisições
+app.use((req, res, next) => {
+  console.log(
+    `➡️  ${req.method} ${req.originalUrl} | IP: ${req.ip} | Time: ${new Date().toISOString()}`
+  );
+  if (["POST", "PUT", "PATCH"].includes(req.method)) {
+    console.log("📨 Body recebido:", req.body);
+  }
+  next();
+});
+
 /* =======================
    Rotas CRUD Mongo
    ======================= */
 
 // Healthcheck / raiz
-app.get("/", (req, res) =>
-  res.json({ ok: true, msg: "API de Produtos Faturados Direto ativa." })
-);
+app.get("/", (req, res) => {
+  console.log("📡 [GET /] Healthcheck chamado");
+  res.json({ ok: true, msg: "API de Produtos Faturados Direto ativa." });
+});
 
 // Criar produto
 app.post("/api/produtos", async (req, res) => {
+  console.log("📥 [POST /api/produtos] Início da rota");
   try {
     const payload = normalizeProdutoPayload(req.body);
+    console.log("🧩 [POST /api/produtos] Payload final para create:", payload);
+
     const created = await PedidoVidro.create(payload);
+
+    console.log("✅ [POST /api/produtos] Produto criado:", {
+      _id: created._id,
+      numeroPedido: created.numeroPedido,
+      cliente: created.cliente,
+      vidro: created.vidro,
+      valorReal: created.valorReal,
+    });
+
     res.status(201).json({ ok: true, data: created });
   } catch (err) {
-    console.error("❌ Erro ao criar produto:", err.message);
+    console.error("❌ [POST /api/produtos] Erro ao criar produto:", err.message);
+    console.error(err);
     res.status(400).json({ ok: false, error: err.message });
   }
 });
 
 // Listar produtos
 app.get("/api/produtos", async (req, res) => {
+  console.log("📥 [GET /api/produtos] Início da rota");
+  console.log("🔎 Query params recebidos:", req.query);
+
   try {
-    const data = await PedidoVidro.find().sort({ createdAt: -1 });
+    const filter = {};
+    if (req.query.numeroPedido) {
+      filter.numeroPedido = String(req.query.numeroPedido);
+    }
+
+    console.log("🔍 [GET /api/produtos] Filtro Mongo:", filter);
+
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    let q = PedidoVidro.find(filter).sort({ createdAt: -1 });
+    if (limit && !Number.isNaN(limit)) {
+      q = q.limit(limit);
+    }
+
+    const data = await q.exec();
+
+    console.log("✅ [GET /api/produtos] Documentos encontrados:", data.length);
     res.json({ ok: true, data });
   } catch (err) {
-    console.error("❌ Erro ao listar produtos:", err.message);
+    console.error("❌ [GET /api/produtos] Erro ao listar produtos:", err.message);
+    console.error(err);
     res.status(400).json({ ok: false, error: err.message });
   }
 });
 
 // Atualizar produto
 app.put("/api/produtos/:id", async (req, res) => {
+  console.log("📥 [PUT /api/produtos/:id] Início da rota, id:", req.params.id);
   try {
     const payload = normalizeProdutoPayload(req.body);
+    console.log(
+      "🧩 [PUT /api/produtos/:id] Payload final para update:",
+      payload
+    );
+
     const updated = await PedidoVidro.findByIdAndUpdate(
       req.params.id,
       payload,
       { new: true, runValidators: true }
     );
+
     if (!updated) {
+      console.warn(
+        "⚠️ [PUT /api/produtos/:id] Produto não encontrado:",
+        req.params.id
+      );
       return res.status(404).json({ ok: false, error: "não encontrado" });
     }
+
+    console.log("✅ [PUT /api/produtos/:id] Produto atualizado:", {
+      _id: updated._id,
+      numeroPedido: updated.numeroPedido,
+      cliente: updated.cliente,
+      vidro: updated.vidro,
+      valorReal: updated.valorReal,
+    });
+
     res.json({ ok: true, data: updated });
   } catch (err) {
-    console.error("❌ Erro ao atualizar produto:", err.message);
+    console.error(
+      "❌ [PUT /api/produtos/:id] Erro ao atualizar produto:",
+      err.message
+    );
+    console.error(err);
     res.status(400).json({ ok: false, error: err.message });
   }
 });
 
 // Remover produto
 app.delete("/api/produtos/:id", async (req, res) => {
+  console.log("📥 [DELETE /api/produtos/:id] Início da rota, id:", req.params.id);
   try {
     const removed = await PedidoVidro.findByIdAndDelete(req.params.id);
+
     if (!removed) {
+      console.warn(
+        "⚠️ [DELETE /api/produtos/:id] Produto não encontrado:",
+        req.params.id
+      );
       return res.status(404).json({ ok: false, error: "não encontrado" });
     }
+
+    console.log("✅ [DELETE /api/produtos/:id] Produto removido:", {
+      _id: removed._id,
+      numeroPedido: removed.numeroPedido,
+      cliente: removed.cliente,
+      vidro: removed.vidro,
+      valorReal: removed.valorReal,
+    });
+
     res.json({ ok: true, data: removed });
   } catch (err) {
-    console.error("❌ Erro ao remover produto:", err.message);
+    console.error(
+      "❌ [DELETE /api/produtos/:id] Erro ao remover produto:",
+      err.message
+    );
+    console.error(err);
     res.status(400).json({ ok: false, error: err.message });
   }
 });
@@ -329,6 +449,7 @@ const OMIE_URL = "https://app.omie.com.br/api/v1/financas/contapagar/";
 app.post("/api/omie/comissao", async (req, res) => {
   try {
     console.log("📥 [COMISSAO] Requisição recebida em /api/omie/comissao");
+    console.log("📨 [COMISSAO] Body completo recebido:", req.body);
 
     const {
       valor_documento,
@@ -344,7 +465,7 @@ app.post("/api/omie/comissao", async (req, res) => {
       tipo_comissao,
     } = req.body || {};
 
-    // Log de entrada (parcial pra não poluir)
+    // Log de entrada (resumo)
     console.log("🔎 [COMISSAO] Body recebido (resumo):", {
       valor_documento,
       data_vencimento,
@@ -354,7 +475,7 @@ app.post("/api/omie/comissao", async (req, res) => {
       tipo,
       papel,
       tipo_comissao,
-      observacao_preview: observacao?.slice(0, 80) || null,
+      observacao_preview: observacao?.slice(0, 120) || null,
     });
 
     // ================== validações ==================
@@ -386,7 +507,7 @@ app.post("/api/omie/comissao", async (req, res) => {
         "🧩 [COMISSAO] Inferindo categoria com base em hint/obs:",
         {
           hint,
-          obs_preview: obs.slice(0, 80),
+          obs_preview: obs.slice(0, 120),
         }
       );
 
@@ -425,17 +546,7 @@ app.post("/api/omie/comissao", async (req, res) => {
       ],
     };
 
-    console.log("📦 [COMISSAO] Payload preparado para Omie (resumo):", {
-      codigo_cliente_fornecedor,
-      codigo_categoria,
-      id_conta_corrente,
-      valor_documento: Number(valor_documento),
-      data_vencimento: toBRDate(data_vencimento),
-      data_previsao: toBRDate(data_previsao),
-      observacao_preview: (
-        observacao ?? "Lançamento de comissão via API"
-      ).slice(0, 80),
-    });
+    console.log("📦 [COMISSAO] Payload completo para Omie:", payload);
 
     const r = await fetch(OMIE_URL, {
       method: "POST",
@@ -443,7 +554,18 @@ app.post("/api/omie/comissao", async (req, res) => {
       body: JSON.stringify(payload),
     });
 
-    const omie = await r.json();
+    const rawText = await r.text();
+    console.log("📨 [COMISSAO] Resposta bruta (texto) da Omie:", rawText);
+
+    let omie;
+    try {
+      omie = JSON.parse(rawText);
+    } catch (e) {
+      console.warn(
+        "⚠️ [COMISSAO] Não foi possível parsear JSON da Omie, retornando texto bruto."
+      );
+      omie = { raw: rawText };
+    }
 
     if (!r.ok) {
       console.error("❌ [COMISSAO] Erro na resposta da Omie:", {
@@ -454,7 +576,8 @@ app.post("/api/omie/comissao", async (req, res) => {
     } else {
       console.log("📤 [COMISSAO] Comissão enviada com sucesso para Omie:", {
         status: r.status,
-        resposta_resumo: {
+        resposta: omie,
+        resumo: {
           codStatus: omie?.codStatus,
           descricaoStatus: omie?.descricaoStatus,
           faultstring: omie?.faultstring,
@@ -479,10 +602,12 @@ app.post("/api/omie/comissao", async (req, res) => {
    ======================= */
 app.listen(PORT, () => {
   console.log(`🚀 Server rodando em http://localhost:${PORT}`);
-  console.log(`🔗 Mongo: ${MONGO_URI ? "(definido)" : "(vazio)"}`);
+  console.log(`🔗 Mongo URI: ${MONGO_URI}`);
   console.log(
     `🔐 OMIE_APP_KEY: ${
       OMIE_APP_KEY ? "(definida)" : "(vazia)"
     } | OMIE_APP_SECRET: ${OMIE_APP_SECRET ? "(definida)" : "(vazia)"}`
   );
+  console.log(`🔑 JWT_SECRET: ${JWT_SECRET ? "(definido)" : "(vazio)"}`);
+  console.log(`🔑 JWT_REFRESH: ${JWT_REFRESH ? "(definido)" : "(vazio)"}`);
 });
