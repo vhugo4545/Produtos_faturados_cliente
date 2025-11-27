@@ -142,7 +142,7 @@
     width:100%;
     border-collapse:separate;
     border-spacing:0;
-    min-width:1150px;
+    min-width:1350px;
     font-size:12px;
   }
   thead th{
@@ -290,11 +290,15 @@
             <th>Recebemos Link de pag.</th>
             <th>Pagamento</th>
             <th>Previsão</th>
+            <th>Fornecedor</th>
             <th>Nº Pedido Fornecedor</th>
             <th>Nº Orç. Fornecedor</th>
+            <th>Nº NF</th>
+            <th>Forma de pagamento</th>
             <th>Vidros prontos</th>
             <th>Na empresa</th>
             <th>Faturamento</th>
+            <th>Observação</th>
             <th class="right">Valor Real</th>
             <th>Ações</th>
           </tr>
@@ -302,7 +306,7 @@
         <tbody><!-- linhas --></tbody>
         <tfoot>
           <tr>
-            <td colspan="14" class="right">Valor Real (total)</td>
+            <td colspan="18" class="right">Valor Real (total)</td>
             <td class="right" id="tfoot-total">R$ 0,00</td>
             <td></td>
           </tr>
@@ -442,7 +446,7 @@ function renderTabela(){
     trHeader.dataset.row = 'header';
 
     const tdHeader = document.createElement('td');
-    tdHeader.colSpan = 16;
+    tdHeader.colSpan = 20;
     tdHeader.innerHTML = `
       <div style="
         display:flex;
@@ -498,21 +502,25 @@ function renderTabela(){
           </select>
         </div>`;
 
-      tr.appendChild(td(text(item.vidro||'')));                     tr.lastChild.setAttribute('data-k','vidro');
-      tr.appendChild(td(tipoSel(item.tipo||'Reto')));               tr.lastChild.setAttribute('data-k','tipo');
-      tr.appendChild(td(num(item.quantidade??'')));                 tr.lastChild.setAttribute('data-k','quantidade');
-      tr.appendChild(td(date(item.orcamentoEnviado)));              tr.lastChild.setAttribute('data-k','orcamentoEnviado');
-      tr.appendChild(td(date(item.aprovacao)));                     tr.lastChild.setAttribute('data-k','aprovacao');
-      tr.appendChild(td(date(item.moldeEnviado)));                  tr.lastChild.setAttribute('data-k','moldeEnviado');
-      tr.appendChild(td(date(item.recebemosLinkPagamento)));        tr.lastChild.setAttribute('data-k','recebemosLinkPagamento');
-      tr.appendChild(td(date(item.pagemento||item.pagamento)));     tr.lastChild.setAttribute('data-k','pagamento');
-      tr.appendChild(td(date(item.previsao)));                      tr.lastChild.setAttribute('data-k','previsao');
-      tr.appendChild(td(text(item.numeroPedidoFornecedor||'')));    tr.lastChild.setAttribute('data-k','numeroPedidoFornecedor');
-      tr.appendChild(td(text(item.numeroOrcFornecedor||'')));       tr.lastChild.setAttribute('data-k','numeroOrcFornecedor');
-      tr.appendChild(td(date(item.vidrosProntos)));                 tr.lastChild.setAttribute('data-k','vidrosProntos');
-      tr.appendChild(td(date(item.naEmpresa)));                     tr.lastChild.setAttribute('data-k','naEmpresa');
-      tr.appendChild(td(fatur(item.faturamento||'Ferreira Ulhoa')));tr.lastChild.setAttribute('data-k','faturamento');
-      tr.appendChild(td(money(item.valorReal||0)));                 tr.lastChild.setAttribute('data-k','valorReal');
+      tr.appendChild(td(text(item.vidro||'')));                         tr.lastChild.setAttribute('data-k','vidro');
+      tr.appendChild(td(tipoSel(item.tipo||'Reto')));                   tr.lastChild.setAttribute('data-k','tipo');
+      tr.appendChild(td(num(item.quantidade??'')));                     tr.lastChild.setAttribute('data-k','quantidade');
+      tr.appendChild(td(date(item.orcamentoEnviado)));                  tr.lastChild.setAttribute('data-k','orcamentoEnviado');
+      tr.appendChild(td(date(item.aprovacao)));                         tr.lastChild.setAttribute('data-k','aprovacao');
+      tr.appendChild(td(date(item.moldeEnviado)));                      tr.lastChild.setAttribute('data-k','moldeEnviado');
+      tr.appendChild(td(date(item.recebemosLinkPagamento)));            tr.lastChild.setAttribute('data-k','recebemosLinkPagamento');
+      tr.appendChild(td(date(item.pagamento)));                         tr.lastChild.setAttribute('data-k','pagamento');
+      tr.appendChild(td(date(item.previsao)));                          tr.lastChild.setAttribute('data-k','previsao');
+      tr.appendChild(td(text(item.fornecedor || cabecalho.fornecedor || '')));   tr.lastChild.setAttribute('data-k','fornecedor');
+      tr.appendChild(td(text(item.numeroPedidoFornecedor||'')));        tr.lastChild.setAttribute('data-k','numeroPedidoFornecedor');
+      tr.appendChild(td(text(item.numeroOrcFornecedor||'')));           tr.lastChild.setAttribute('data-k','numeroOrcFornecedor');
+      tr.appendChild(td(text(item.numeroNotaFiscal || cabecalho.numeroNF || '')));   tr.lastChild.setAttribute('data-k','numeroNotaFiscal');
+      tr.appendChild(td(text(item.formaPagamento || cabecalho.formaPagamento || ''))); tr.lastChild.setAttribute('data-k','formaPagamento');
+      tr.appendChild(td(date(item.vidrosProntos)));                     tr.lastChild.setAttribute('data-k','vidrosProntos');
+      tr.appendChild(td(date(item.naEmpresa)));                         tr.lastChild.setAttribute('data-k','naEmpresa');
+      tr.appendChild(td(fatur(item.faturamento||'Ferreira Ulhoa')));    tr.lastChild.setAttribute('data-k','faturamento');
+      tr.appendChild(td(text(item.observacao || cabecalho.observacao || ''))); tr.lastChild.setAttribute('data-k','observacao');
+      tr.appendChild(td(money(item.valorReal||0)));                     tr.lastChild.setAttribute('data-k','valorReal');
 
       const tdAcoes = document.createElement('td');
       tdAcoes.innerHTML = `
@@ -630,9 +638,12 @@ document.getElementById('btn-add-item')?.addEventListener('click', ()=>{
     previsao: '',
     numeroPedidoFornecedor: '',
     numeroOrcFornecedor: '',
+    numeroNotaFiscal: cabecalho.numeroNF || '',
+    formaPagamento: cabecalho.formaPagamento || '',
     vidrosProntos: '',
     naEmpresa: '',
     faturamento: 'Ferreira Ulhoa',
+    observacao: cabecalho.observacao || '',
     valorReal: 0,
 
     grupoNome: 'Manual',
@@ -670,12 +681,27 @@ async function salvarAlteracoes(){
 
       clone.numeroPedido = cabecalho.numeroPedido || clone.numeroPedido;
       clone.cliente      = cabecalho.cliente      || clone.cliente;
-      clone.fornecedor   = cabecalho.fornecedor   || clone.fornecedor;
-      clone.vendedor     = cabecalho.vendedor     || clone.vendedor;
 
-      clone.observacao       = cabecalho.observacao ?? clone.observacao;
-      clone.numeroNotaFiscal = cabecalho.numeroNF ?? clone.numeroNotaFiscal;
-      clone.formaPagamento   = cabecalho.formaPagamento ?? clone.formaPagamento;
+      // fornecedor por linha – se não tiver, assume do cabeçalho
+      if (!clone.fornecedor && cabecalho.fornecedor) {
+        clone.fornecedor = cabecalho.fornecedor;
+      }
+
+      // vendedor → responsavelVendedor no back
+      if (cabecalho.vendedor) {
+        clone.responsavelVendedor = cabecalho.vendedor;
+      }
+
+      // NF, forma de pagamento e observação por linha
+      if (!clone.numeroNotaFiscal && cabecalho.numeroNF) {
+        clone.numeroNotaFiscal = cabecalho.numeroNF;
+      }
+      if (!clone.formaPagamento && cabecalho.formaPagamento) {
+        clone.formaPagamento = cabecalho.formaPagamento;
+      }
+      if (!clone.observacao && cabecalho.observacao) {
+        clone.observacao = cabecalho.observacao;
+      }
 
       clone.meta = { ...(clone.meta || {}) };
       if(cabecalho.telefoneFornecedor) clone.meta.telefoneFornecedor = cabecalho.telefoneFornecedor;
@@ -758,7 +784,6 @@ async function carregar(){
   const numeroPedidoStr = String(numeroPedido);
 
   setStatus('carregando…');
- 
 
   const urlItens = new URL(`${BASE_URL}/api/produtos`);
   urlItens.searchParams.set('limit','2000');
@@ -794,8 +819,8 @@ async function carregar(){
     cabecalho.fornecedor   = first.fornecedor|| '';
     cabecalho.vendedor     = first.vendedor  || first.responsavelVendedor || '';
 
-    cabecalho.observacao   = first.observacao || '';
-    cabecalho.numeroNF     = first.numeroNotaFiscal || '';
+    cabecalho.observacao     = first.observacao || '';
+    cabecalho.numeroNF       = first.numeroNotaFiscal || '';
     cabecalho.formaPagamento = first.formaPagamento || '';
 
     $('#titulo').textContent = `Pedido ${numeroPedidoStr}`;
@@ -894,7 +919,7 @@ async function carregar(){
         const descUtil    = String(ins.descricao_utilizacao || '').trim();
 
         if (isMaoDeObraHoraNome(nomeProduto)) return;     // não mostra Mão de Obra
-        if (descUtil === 'Produto Acabado') return;        // não mostra o Produto Acabado em si
+        if (descUtil === 'Produto Acabado') return;       // não mostra o Produto Acabado em si
 
         itens.push({
           numeroPedido: cabecalho.numeroPedido,
@@ -914,9 +939,12 @@ async function carregar(){
           previsao:         previsaoGlobal || '',
           numeroPedidoFornecedor: '',
           numeroOrcFornecedor:   '',
+          numeroNotaFiscal:      cabecalho.numeroNF || '',
+          formaPagamento:        cabecalho.formaPagamento || '',
           vidrosProntos: '',
           naEmpresa:     '',
           faturamento:   'Ferreira Ulhoa',
+          observacao:    cabecalho.observacao || '',
           valorReal:     ins.custo || 0,
 
           grupoNome: grupoLabelBase,
@@ -1063,11 +1091,7 @@ if (inpFornecedor){
 }
 
 carregarPessoas();
-
-
 </script>
-
-
 
 </body>
 </html>
