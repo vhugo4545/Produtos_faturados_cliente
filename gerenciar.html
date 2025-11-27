@@ -209,6 +209,33 @@
   .btn-danger:hover{
     background:#fee2e2;
   }
+
+  /* ===== Popup Resquício ===== */
+  .modal-backdrop{
+    position:fixed;
+    inset:0;
+    background:rgba(15,23,42,.45);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:50;
+  }
+  .modal-card{
+    background:#fff;
+    border-radius:16px;
+    box-shadow:0 20px 60px rgba(15,23,42,.35);
+    padding:16px 18px;
+    max-width:420px;
+    width:100%;
+  }
+  .modal-card h3{
+    margin:0 0 8px;
+    font-size:16px;
+  }
+  .modal-card p{
+    margin:4px 0;
+    font-size:13px;
+  }
 </style>
 </head>
 <body>
@@ -265,14 +292,49 @@
 
       <div class="dl" id="info-totais">
         <h4>Totais & Cálculos</h4>
-        <div class="row"><div>Itens</div><div id="t-itens">0</div></div>
-        <div class="row"><div>Valor total do pedido</div><div id="t-valor-total-pedido">R$ 0,00</div></div>
-        <div class="row"><div>Valor total faturamento direto – orçado</div><div id="t-valor-fatur-direto">R$ 0,00</div></div>
-        <div class="row"><div>Valor aproximado UF</div><div id="t-valor-uf">R$ 0,00</div></div>
-        <div class="row"><div>Valor total NF produtos</div><div id="t-nf-produtos">R$ 0,00</div></div>
-        <div class="row"><div>Valor total NF serviços</div><div id="t-nf-servicos">R$ 0,00</div></div>
-        <div class="row"><div>Valor real (total)</div><div id="t-valor-real-total">R$ 0,00</div></div>
-        <div class="row"><div>Diferença de faturamento serviço</div><div id="t-dif-fatur-serv">R$ 0,00</div></div>
+
+        <div class="row">
+          <div>Itens</div>
+          <div id="t-itens">0</div>
+        </div>
+
+        <div class="row">
+          <div>Valor total do pedido</div>
+          <input id="t-valor-total-pedido" placeholder="R$ 0,00" />
+        </div>
+
+        <div class="row">
+          <div>Valor total faturamento direto – orçado</div>
+          <input id="t-valor-fatur-direto" placeholder="R$ 0,00" />
+        </div>
+
+        <div class="row">
+          <div>Valor aproximado UF</div>
+          <input id="t-valor-uf" placeholder="R$ 0,00" />
+        </div>
+
+        <div class="row">
+          <div>Valor total NF produtos</div>
+          <input id="t-nf-produtos" placeholder="R$ 0,00" />
+        </div>
+
+        <div class="row">
+          <div>Valor total NF serviços</div>
+          <input id="t-nf-servicos" placeholder="R$ 0,00" />
+        </div>
+
+        <div class="row">
+          <div>Valor real (total)</div>
+          <input id="t-valor-real-total" class="readonly" readonly value="R$ 0,00" />
+        </div>
+
+        <div class="row">
+          <div>Diferença de faturamento serviço</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="t-dif-fatur-serv" placeholder="R$ 0,00" />
+            <button type="button" id="btn-residuo" class="btn btn-icon" style="white-space:nowrap;">Ver resquício</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -343,6 +405,21 @@
   </div>
 </div>
 
+<!-- Popup Resquício -->
+<div id="popup-residuo" class="modal-backdrop">
+  <div class="modal-card">
+    <h3>Detalhamento do resquício</h3>
+    <p id="residuo-formula" class="muted">Fórmula: Faturamento direto + NF serviços − Valor real (total).</p>
+    <p>Resquício sugerido: <strong id="residuo-sugestao">R$ 0,00</strong></p>
+    <p class="muted" style="font-size:12px;">
+      Este valor considera os totais digitados acima e a soma atual dos valores reais dos itens.
+    </p>
+    <div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px;">
+      <button type="button" class="btn" data-close-residuo>Fechar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const BASE_URL       = 'https://ulhoa-vidros-1ae0adcf5f73.herokuapp.com';
 const PROPOSTAS_URL  = 'https://ulhoa-0a02024d350a.herokuapp.com/api/propostas';
@@ -409,24 +486,6 @@ function getPedidoParam(){
 function isMaoDeObraHoraNome(nome){
   const n = String(nome||'').trim();
   return n === 'Mão de Obra de Instalação (por Hora)';
-}
-
-/* =======================
-   Helpers de chave p/ insumos
-   ======================= */
-// chave baseada em: codigoOmie + nome + tipo
-function buildKeyFromVidroDoc(doc){
-  const cod  = doc?.meta?.codigoOmie ? String(doc.meta.codigoOmie) : '';
-  const nome = String(doc.vidro || '').trim().toLowerCase();
-  const tipo = String(doc.tipo || '').trim().toLowerCase();
-  return `${cod}||${nome}||${tipo}`;
-}
-
-function buildKeyFromPropostaInsumo(ins){
-  const cod  = ins.codigo_omie ? String(ins.codigo_omie) : '';
-  const nome = String(ins.nome_produto || '').trim().toLowerCase();
-  const tipo = String(ins.descricao_utilizacao || '').trim().toLowerCase();
-  return `${cod}||${nome}||${tipo}`;
 }
 
 // =================== RENDER TABELA COM GRUPOS ===================
@@ -599,27 +658,13 @@ function renderTabela(){
 
   $('#t-itens').textContent = itens.length;
   $('#tfoot-total').textContent       = fmtBRL(totalReal);
-  $('#t-valor-real-total').textContent = fmtBRL(totalReal);
-
-  tbody.querySelectorAll('.btn-toggle-grupo').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const grupoId = btn.getAttribute('data-grupo');
-      const collapsed = btn.getAttribute('data-collapsed') === '1';
-      btn.setAttribute('data-collapsed', collapsed ? '0' : '1');
-      btn.textContent = collapsed ? '▾' : '▸';
-
-      tbody.querySelectorAll(`tr[data-grupo="${grupoId}"][data-row="item"]`)
-        .forEach(tr=>{
-          tr.style.display = collapsed ? '' : 'none';
-        });
-    });
-  });
+  $('#t-valor-real-total').value     = fmtBRL(totalReal);
 }
 
 function recalcularTotaisLocais(){
   const totalReal = itens.reduce((acc,i)=> acc + Number(i.valorReal||0), 0);
   $('#tfoot-total').textContent       = fmtBRL(totalReal);
-  $('#t-valor-real-total').textContent = fmtBRL(totalReal);
+  $('#t-valor-real-total').value     = fmtBRL(totalReal);
 }
 
 function atualizarPrevisaoCabecalho(){
@@ -719,6 +764,14 @@ async function salvarAlteracoes(){
       if (!clone.observacao && cabecalho.observacao) {
         clone.observacao = cabecalho.observacao;
       }
+
+      // Totais por linha (mesmo valor para todas as linhas deste pedido)
+      clone.valorTotalPedido             = totaisSistema.valorTotalPedido;
+      clone.valorTotalFaturamentoDiretoOrcado = totaisSistema.valorFaturamentoDiretoOrcado;
+      clone.valorAproximadoUF            = totaisSistema.valorAproximadoUF;
+      clone.valorTotalNFProdutos         = totaisSistema.valorNFProdutos;
+      clone.valorTotalNFServicos         = totaisSistema.valorNFServicos;
+      clone.residuoDiferencaFaturamentoServico = totaisSistema.residuoDiferencaFaturamentoServico;
 
       clone.meta = { ...(clone.meta || {}) };
       if(cabecalho.telefoneFornecedor) clone.meta.telefoneFornecedor = cabecalho.telefoneFornecedor;
@@ -830,15 +883,6 @@ async function carregar(){
       if(nome) nomesProdutosPedido.add(nome.toLowerCase());
     });
 
-    // mapa de insumos já salvos no Mongo (rota vidros) – PRIORIDADE
-    const mapaInsumosVidro = new Map();
-    docsPedido.forEach(d=>{
-      const key = buildKeyFromVidroDoc(d);
-      if(key){
-        mapaInsumosVidro.set(key, d);
-      }
-    });
-
     // cabeçalho a partir do PedidoVidro
     cabecalho.numeroPedido = numeroPedidoStr;
     cabecalho.cliente      = first.cliente   || '';
@@ -865,12 +909,12 @@ async function carregar(){
     totaisSistema.valorNFServicos              = Number(first.valorTotalNFServicos||0);
     totaisSistema.residuoDiferencaFaturamentoServico = Number(first.residuoDiferencaFaturamentoServico||0);
 
-    $('#t-valor-total-pedido').textContent = fmtBRL(totaisSistema.valorTotalPedido);
-    $('#t-valor-fatur-direto').textContent = fmtBRL(totaisSistema.valorFaturamentoDiretoOrcado);
-    $('#t-valor-uf').textContent           = fmtBRL(totaisSistema.valorAproximadoUF);
-    $('#t-nf-produtos').textContent        = fmtBRL(totaisSistema.valorNFProdutos);
-    $('#t-nf-servicos').textContent        = fmtBRL(totaisSistema.valorNFServicos);
-    $('#t-dif-fatur-serv').textContent     = fmtBRL(totaisSistema.residuoDiferencaFaturamentoServico);
+    $('#t-valor-total-pedido').value = fmtBRL(totaisSistema.valorTotalPedido);
+    $('#t-valor-fatur-direto').value = fmtBRL(totaisSistema.valorFaturamentoDiretoOrcado);
+    $('#t-valor-uf').value           = fmtBRL(totaisSistema.valorAproximadoUF);
+    $('#t-nf-produtos').value        = fmtBRL(totaisSistema.valorNFProdutos);
+    $('#t-nf-servicos').value        = fmtBRL(totaisSistema.valorNFServicos);
+    $('#t-dif-fatur-serv').value     = fmtBRL(totaisSistema.residuoDiferencaFaturamentoServico);
 
     // ----- propostas (server proposta) -----
     if(!rPropAll.ok){
@@ -879,6 +923,7 @@ async function carregar(){
       atualizarPrevisaoCabecalho();
       renderTabela();
       setStatus('ok');
+      recalcularTotaisLocais();
       return;
     }
 
@@ -899,6 +944,7 @@ async function carregar(){
       atualizarPrevisaoCabecalho();
       renderTabela();
       setStatus('ok');
+      recalcularTotaisLocais();
       return;
     }
 
@@ -947,55 +993,38 @@ async function carregar(){
         if (isMaoDeObraHoraNome(nomeProduto)) return;     // não mostra Mão de Obra
         if (descUtil === 'Produto Acabado') return;       // não mostra o Produto Acabado em si
 
-        // 🔹 PRIORIDADE: se já tiver linha salva na rota de vidros, usa ela como base
-        const keyInsumo = buildKeyFromPropostaInsumo(ins);
-        const docExistente = keyInsumo ? mapaInsumosVidro.get(keyInsumo) : null;
-        if (docExistente && keyInsumo) {
-          // remove do mapa para saber depois o que sobrou sem correspondência, se quiser
-          mapaInsumosVidro.delete(keyInsumo);
-        }
-
-        const base = docExistente || {};
-
-        const vendedorLinha =
-          base.vendedor ||
-          base.responsavelVendedor ||
-          cabecalho.vendedor;
-
         itens.push({
-          _id:           base._id, // se veio do Mongo, mantém pra dar PUT depois
-          numeroPedido:  base.numeroPedido || cabecalho.numeroPedido,
-          cliente:       base.cliente || cabecalho.cliente,
-          fornecedor:    base.fornecedor || cabecalho.fornecedor,
-          vendedor:      vendedorLinha,
+          numeroPedido: cabecalho.numeroPedido,
+          cliente:      cabecalho.cliente,
+          fornecedor:   cabecalho.fornecedor,
+          vendedor:     cabecalho.vendedor,
 
-          vidro:        base.vidro || nomeProduto,
-          tipo:         base.tipo || descUtil || 'Reto',
-          quantidade:   (typeof base.quantidade === 'number' ? base.quantidade : (ins.quantidade ?? 0)),
+          vidro:        nomeProduto,
+          tipo:         descUtil || 'Reto',
+          quantidade:   ins.quantidade ?? 0,
 
-          orcamentoEnviado:       base.orcamentoEnviado || '',
-          aprovacao:              base.aprovacao || '',
-          moldeEnviado:           base.moldeEnviado || '',
-          recebemosLinkPagamento: base.recebemosLinkPagamento || '',
-          pagamento:              base.pagamento || '',
-          previsao:               base.previsao || previsaoGlobal || '',
-          numeroPedidoFornecedor: base.numeroPedidoFornecedor || '',
-          numeroOrcFornecedor:    base.numeroOrcFornecedor || '',
-          numeroNotaFiscal:       base.numeroNotaFiscal || cabecalho.numeroNF || '',
-          formaPagamento:         base.formaPagamento || cabecalho.formaPagamento || '',
-          vidrosProntos:          base.vidrosProntos || '',
-          naEmpresa:              base.naEmpresa || '',
-          faturamento:            base.faturamento || 'Ferreira Ulhoa',
-          observacao:             base.observacao || cabecalho.observacao || '',
-          valorReal:              typeof base.valorReal === 'number' ? base.valorReal : (ins.custo || 0),
+          orcamentoEnviado: '',
+          aprovacao:        '',
+          moldeEnviado:     '',
+          recebemosLinkPagamento: '',
+          pagamento:        '',
+          previsao:         previsaoGlobal || '',
+          numeroPedidoFornecedor: '',
+          numeroOrcFornecedor:   '',
+          numeroNotaFiscal:      cabecalho.numeroNF || '',
+          formaPagamento:        cabecalho.formaPagamento || '',
+          vidrosProntos: '',
+          naEmpresa:     '',
+          faturamento:   'Ferreira Ulhoa',
+          observacao:    cabecalho.observacao || '',
+          valorReal:     ins.custo || 0,
 
-          grupoNome: base.grupoNome || grupoLabelBase,
-          grupoTipo: base.grupoTipo || grupoTipo,
+          grupoNome: grupoLabelBase,
+          grupoTipo,
 
           meta: {
-            ...(base.meta || {}),
             grupoNome:           grupoLabelBase,
-            codigoOmie:          ins.codigo_omie || (base.meta && base.meta.codigoOmie) || '',
+            codigoOmie:          ins.codigo_omie || '',
             quantidadeOriginal:  ins.quantidade,
             quantidadeDesejada:  ins.quantidade_desejada
           }
@@ -1005,6 +1034,7 @@ async function carregar(){
 
     atualizarPrevisaoCabecalho();
     renderTabela();
+    recalcularTotaisLocais();
     setStatus('ok');
     
   }catch(e){
@@ -1014,8 +1044,68 @@ async function carregar(){
   }
 }
 
+// === Inputs editáveis de totais ===
+function initTotaisInputs(){
+  const map = [
+    { id:'t-valor-total-pedido', key:'valorTotalPedido' },
+    { id:'t-valor-fatur-direto', key:'valorFaturamentoDiretoOrcado' },
+    { id:'t-valor-uf',           key:'valorAproximadoUF' },
+    { id:'t-nf-produtos',        key:'valorNFProdutos' },
+    { id:'t-nf-servicos',        key:'valorNFServicos' },
+    { id:'t-dif-fatur-serv',     key:'residuoDiferencaFaturamentoServico' },
+  ];
+
+  map.forEach(({id,key})=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('change', e=>{
+      const num = moneyToNumber(e.target.value);
+      totaisSistema[key] = num;
+      e.target.value = fmtBRL(num);
+    });
+    el.addEventListener('blur', e=>{
+      const num = moneyToNumber(e.target.value);
+      e.target.value = fmtBRL(num);
+    });
+  });
+}
+
+// === Popup Resquício ===
+function initPopupResiduo(){
+  const popup = document.getElementById('popup-residuo');
+  const btn   = document.getElementById('btn-residuo');
+  if(!popup || !btn) return;
+
+  const formulaEl = document.getElementById('residuo-formula');
+  const sugEl     = document.getElementById('residuo-sugestao');
+
+  btn.addEventListener('click', ()=>{
+    const totalReal = itens.reduce((acc,i)=> acc + Number(i.valorReal||0), 0);
+    const fatDir = totaisSistema.valorFaturamentoDiretoOrcado || 0;
+    const nfServ = totaisSistema.valorNFServicos || 0;
+    const residCalc = fatDir + nfServ - totalReal;
+
+    if(formulaEl){
+      formulaEl.textContent = `${fmtBRL(fatDir)} + ${fmtBRL(nfServ)} − ${fmtBRL(totalReal)} = ${fmtBRL(residCalc)}`;
+    }
+    if(sugEl){
+      sugEl.textContent = fmtBRL(residCalc);
+    }
+
+    popup.style.display = 'flex';
+  });
+
+  popup.addEventListener('click', e=>{
+    if(e.target === popup || e.target.closest('[data-close-residuo]')){
+      popup.style.display = 'none';
+    }
+  });
+}
+
 // boot
 carregar();
+initTotaisInputs();
+initPopupResiduo();
 </script>
 
 <script>
