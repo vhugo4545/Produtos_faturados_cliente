@@ -236,9 +236,59 @@
     margin:4px 0;
     font-size:13px;
   }
+
+  /* ===== Loader Global Moderno ===== */
+  #global-loader{
+    position:fixed;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(248,250,252,0.85);
+    z-index:999;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .25s ease;
+    backdrop-filter:blur(4px);
+  }
+  #global-loader.active{
+    opacity:1;
+    pointer-events:auto;
+  }
+  .loader-box{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 16px;
+    border-radius:999px;
+    background:#ffffff;
+    box-shadow:0 18px 40px rgba(15,23,42,.12);
+    font-size:14px;
+    color:var(--muted);
+  }
+  .loader-spinner{
+    width:18px;
+    height:18px;
+    border-radius:999px;
+    border:2px solid rgba(37,99,235,.2);
+    border-top-color:var(--primary);
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{
+    to{transform:rotate(360deg);}
+  }
 </style>
 </head>
 <body>
+
+<!-- LOADER GLOBAL -->
+<div id="global-loader" class="active">
+  <div class="loader-box">
+    <div class="loader-spinner"></div>
+    <span>Carregando insumos e dados do pedido…</span>
+  </div>
+</div>
+
 <div class="wrap">
   <div class="card">
     <div class="toolbar">
@@ -462,6 +512,16 @@ const PROPOSTAS_URL  = 'https://ulhoa-0a02024d350a.herokuapp.com/api/propostas';
 const $ = (s,root=document)=>root.querySelector(s);
 const setStatus = t => { const el=$('#status'); if(el) el.textContent='status: '+t; };
 
+/* Loader global */
+function showLoader(){
+  const el = document.getElementById('global-loader');
+  if(el) el.classList.add('active');
+}
+function hideLoader(){
+  const el = document.getElementById('global-loader');
+  if(el) el.classList.remove('active');
+}
+
 const fmtBRL = n => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0));
 function toISODate(v){
   if(!v) return '';
@@ -485,7 +545,7 @@ let itens = [];
 let itensRemovidosIds = new Set();
 let filtroGrupoTipo = 'todos'; // 'todos' | 'produto' | 'vidro'
 
-// nomes de vidros/insumos presentes (não usamos mais pra recarregar, mas deixei global se precisar)
+// nomes de vidros/insumos presentes
 let nomesProdutosPedido = new Set();
 
 let cabecalho = {
@@ -518,6 +578,7 @@ function getPedidoParam(){
   return u.searchParams.get('pedido') || '';
 }
 
+/* 🔎 Nome que NUNCA deve aparecer na tela */
 function isMaoDeObraHoraNome(nome){
   const n = String(nome||'').trim();
   return n === 'Mão de Obra de Instalação (por Hora)';
@@ -525,12 +586,15 @@ function isMaoDeObraHoraNome(nome){
 
 /* =========================
    MONTA ITENS APENAS DO MONGO
-   (quando já existe algo salvo)
    ========================= */
 function montarItensAPartirDoMongo(docsPedido){
-  console.log('📌 montarItensAPartirDoMongo() – docsPedido:', docsPedido);
+  console.log('📌 montarItensAPartirDoMongo() – docsPedido (bruto):', docsPedido);
 
-  const lista = Array.isArray(docsPedido) ? docsPedido : [];
+  const lista = Array.isArray(docsPedido)
+    ? docsPedido.filter(doc => !isMaoDeObraHoraNome(doc.vidro)) // 🔥 FILTRA MÃO DE OBRA
+    : [];
+
+  console.log('📌 montarItensAPartirDoMongo() – lista filtrada (sem Mão de Obra):', lista);
 
   itens = lista.map(doc => ({
     ...doc,
@@ -657,6 +721,7 @@ function renderTabela(){
         </div>
       </div>
     `;
+    trHeader.appendChild(document.createTextNode(''));
     trHeader.appendChild(tdHeader);
     tbody.appendChild(trHeader);
 
@@ -835,7 +900,7 @@ async function salvarAlteracoes(){
   try{
     let okCount = 0;
 
-    // 🔄 SINCRONIZA CABEÇALHO COM O QUE ESTÁ NA TELA ANTES DE QUALQUER COISA
+    // SINCRONIZA CABEÇALHO COM A TELA
     cabecalho.numeroPedido        = ($('#p-numero')?.value || '').trim();
     cabecalho.cliente             = ($('#p-cliente')?.value || '').trim();
     cabecalho.fornecedor          = ($('#p-fornecedor')?.value || '').trim();
@@ -847,7 +912,7 @@ async function salvarAlteracoes(){
     cabecalho.emailFornecedor     = ($('#p-forn-email')?.value || '').trim();
     cabecalho.codigoFornecedorOmie= ($('#p-forn-codigo')?.value || '').trim();
 
-    // Também garante totais sincronizados (caso o usuário não tenha saído do campo)
+    // Totais sincronizados
     totaisSistema.valorTotalPedido             = moneyToNumber($('#t-valor-total-pedido')?.value || 0);
     totaisSistema.valorFaturamentoDiretoOrcado = moneyToNumber($('#t-valor-fatur-direto')?.value || 0);
     totaisSistema.valorAproximadoUF            = moneyToNumber($('#t-valor-uf')?.value || 0);
@@ -856,7 +921,7 @@ async function salvarAlteracoes(){
     totaisSistema.residuoDiferencaFaturamentoServico =
       moneyToNumber($('#t-dif-fatur-serv')?.value || 0);
 
-    // 🗑 Deletar itens removidos
+    // Deletar itens removidos
     console.log('🗑 Itens a deletar (ids):', Array.from(itensRemovidosIds));
     for (const id of itensRemovidosIds){
       try{
@@ -871,26 +936,22 @@ async function salvarAlteracoes(){
     }
     itensRemovidosIds.clear();
 
-    // 💾 Upsert (cria/atualiza) cada item
+    // Upsert itens
     for(const it of itens){
       const {_id, createdAt, updatedAt, __v, ...rest} = it;
       const clone = { ...rest };
 
-      // Número do pedido e cliente sempre do cabeçalho
       clone.numeroPedido = cabecalho.numeroPedido || clone.numeroPedido || getPedidoParam();
       clone.cliente      = cabecalho.cliente      || clone.cliente      || $('#p-cliente')?.value || '';
 
-      // ⚠️ ESTES CAMPOS SEMPRE DEVEM SEGUIR O CABEÇALHO
       clone.fornecedor           = cabecalho.fornecedor || '';
       clone.responsavelVendedor  = cabecalho.vendedor   || clone.responsavelVendedor || clone.vendedor || '';
       clone.numeroNotaFiscal     = cabecalho.numeroNF   || '';
       clone.formaPagamento       = cabecalho.formaPagamento || '';
       clone.observacao           = cabecalho.observacao || '';
 
-      // Evita manter campo "vendedor" duplicado
       delete clone.vendedor;
 
-      // Totais por linha (mesmos para todo mundo)
       clone.valorTotalPedido                      = totaisSistema.valorTotalPedido;
       clone.valorTotalFaturamentoDiretoOrcado     = totaisSistema.valorFaturamentoDiretoOrcado;
       clone.valorAproximadoUF                     = totaisSistema.valorAproximadoUF;
@@ -898,7 +959,6 @@ async function salvarAlteracoes(){
       clone.valorTotalNFServicos                  = totaisSistema.valorNFServicos;
       clone.residuoDiferencaFaturamentoServico    = totaisSistema.residuoDiferencaFaturamentoServico;
 
-      // Meta com dados do fornecedor
       clone.meta = { ...(clone.meta || {}) };
       if (cabecalho.telefoneFornecedor)   clone.meta.telefoneFornecedor   = cabecalho.telefoneFornecedor;
       if (cabecalho.emailFornecedor)      clone.meta.emailFornecedor      = cabecalho.emailFornecedor;
@@ -938,7 +998,7 @@ async function salvarAlteracoes(){
     console.log('✅ salvarAlteracoes concluído. Itens salvos com sucesso:', okCount);
     setStatus('ok');
 
-    // 🔁 Recarrega a tela já a partir do Mongo (com OBS e FORNECEDOR atualizados)
+    // Recarrega a tela a partir do Mongo
     await carregar();
 
   }catch(err){
@@ -950,7 +1010,7 @@ async function salvarAlteracoes(){
 
 document.getElementById('btn-salvar')?.addEventListener('click', salvarAlteracoes);
 
-// barra filtros (produto acabado / vidro)
+// barra filtros
 (function initBarraFiltros(){
   const wrap = document.querySelector('.table-wrap');
   if(!wrap) return;
@@ -988,11 +1048,13 @@ async function carregar(){
   const numeroPedido = getPedidoParam();
   if(!numeroPedido){
     alert('Pedido não informado');
+    hideLoader();
     return;
   }
   const numeroPedidoStr = String(numeroPedido);
 
   setStatus('carregando…');
+  showLoader();
   console.log('🔄 carregar() iniciado para pedido:', numeroPedidoStr);
 
   const urlItens = new URL(`${BASE_URL}/api/produtos`);
@@ -1011,26 +1073,30 @@ async function carregar(){
     console.log('📡 [GET] /api/produtos status:', rProd.status);
     console.log('📡 [GET] /api/propostas status:', rPropAll.status);
 
-    // ----- produtos do pedido (Mongo) -----
+    // produtos do pedido (Mongo)
     const jProd = await rProd.json().catch(()=>({ raw:'não foi possível parsear JSON de produtos' }));
     console.log('📥 Resposta produtos (PedidoVidro):', jProd);
 
-    const docsPedido = Array.isArray(jProd.data)
+    const docsPedidoBruto = Array.isArray(jProd.data)
       ? jProd.data.filter(d => String(d.numeroPedido || '') === numeroPedidoStr)
       : [];
 
-    console.log('📊 docsPedido filtrados pelo numeroPedido:', docsPedido);
+    // 🔥 FILTRA QUALQUER REGISTRO "Mão de Obra de Instalação (por Hora)" QUE ESTEJA NO MONGO
+    const docsPedido = docsPedidoBruto.filter(d => !isMaoDeObraHoraNome(d.vidro));
+
+    console.log('📊 docsPedido filtrados pelo numeroPedido (sem Mão de Obra):', docsPedido);
 
     // SE JÁ EXISTE QUALQUER ITEM NO MONGO → ELE É A VERDADE
     if (docsPedido.length > 0){
       console.log('📌 Pedido já possui itens salvos no Mongo. NÃO vou recriar a partir da proposta.');
       montarItensAPartirDoMongo(docsPedido);
+      setStatus('ok');
       return;
     }
 
     console.log('🆕 Pedido ainda NÃO tem itens salvos. Vou montar a partir da proposta.');
 
-    // ===== A partir daqui só roda para pedido NOVO (sem itens no banco) =====
+    // A partir daqui só roda para pedido NOVO (sem itens no banco)
     if(!rPropAll.ok){
       console.warn('Falha ao carregar lista de propostas', rPropAll.status);
       itens = [];
@@ -1078,7 +1144,6 @@ async function carregar(){
     console.log('📅 previsaoGlobal da proposta:', previsaoGlobal);
 
     nomesProdutosPedido = new Set();
-    console.log('🧾 nomesProdutosPedido (SET inicial em pedido novo):', nomesProdutosPedido);
 
     itens = [];
 
@@ -1097,7 +1162,6 @@ async function carregar(){
         : (grupo.nome || '');
 
       const deveIncluir = true;
-      console.log('📦 Grupo analisado (pedido novo):', { grupoNome: grupoLabelBase, grupoTipo, deveIncluir });
 
       if (!deveIncluir) return;
 
@@ -1105,6 +1169,7 @@ async function carregar(){
         const nomeProduto = String(ins.nome_produto || '').trim();
         const descUtil    = String(ins.descricao_utilizacao || '').trim();
 
+        // 🔥 NÃO TRAZ "Mão de Obra de Instalação (por Hora)" na criação a partir da proposta
         if (isMaoDeObraHoraNome(nomeProduto)) {
           console.log('⏭ Insumo ignorado (Mão de Obra por hora):', nomeProduto);
           return;
@@ -1152,7 +1217,6 @@ async function carregar(){
           }
         };
 
-        console.log('➕ Adicionando item convertido da proposta para tabela:', itemPush);
         itens.push(itemPush);
       });
     });
@@ -1175,16 +1239,17 @@ async function carregar(){
     atualizarPrevisaoCabecalho();
     renderTabela();
     setStatus('ok');
-    console.log('✅ carregar() finalizado com sucesso (pedido novo).');
     
   }catch(e){
     console.error('💥 Erro em carregar():', e);
     setStatus('erro');
     alert('Não foi possível carregar o pedido.');
+  } finally {
+    hideLoader();
   }
 }
 
-// === Inputs editáveis de totais ===
+// Inputs editáveis de totais
 function initTotaisInputs(){
   const map = [
     { id:'t-valor-total-pedido', key:'valorTotalPedido' },
@@ -1211,7 +1276,7 @@ function initTotaisInputs(){
   });
 }
 
-// === Popup Resquício (ATUALIZADO) ===
+// Popup Resquício
 function initPopupResiduo(){
   const popup = document.getElementById('popup-residuo');
   const btn   = document.getElementById('btn-residuo');
@@ -1228,13 +1293,6 @@ function initPopupResiduo(){
     const fatDir    = totaisSistema.valorFaturamentoDiretoOrcado || 0;
     const nfServ    = totaisSistema.valorNFServicos || 0;
     const residCalc = fatDir + nfServ - totalReal;
-
-    console.log('ℹ️ Abrindo popup resquício com dados:', {
-      totalReal,
-      faturamentoDireto: fatDir,
-      nfServicos: nfServ,
-      residCalc
-    });
 
     if(formulaEl){
       formulaEl.textContent = `${fmtBRL(fatDir)} + ${fmtBRL(nfServ)} − ${fmtBRL(totalReal)} = ${fmtBRL(residCalc)}`;
@@ -1340,7 +1398,6 @@ async function carregarPessoas(){
       if(!nome) return;
       mapaFornecedoresPorNome.set(nome, p);
     });
-    console.log('📊 Pessoas carregadas (qtde):', cachePessoas.length);
 
     preencherDatalist('lista-fornecedores', cachePessoas);
     preencherDatalist('lista-clientes-residuo', cachePessoas);
@@ -1423,7 +1480,6 @@ if (inpFornecedor){
     clearTimeout(sugTimer);
     sugTimer = setTimeout(()=>{
       const sugestoes = sugerirPorTexto(q);
-      console.log('🔍 Sugestões de fornecedor para texto:', q, sugestoes);
       preencherDatalist('lista-fornecedores', sugestoes);
     }, 200);
   });
@@ -1439,9 +1495,7 @@ if (inpFornecedor){
 
 carregarPessoas();
 
-// =========================
-//  Busca de cliente no popup de resquício
-// =========================
+// Busca de cliente no popup de resquício
 (function initBuscaClienteResiduo(){
   const inp = document.getElementById('residuo-cliente-nome');
   if(!inp) return;
@@ -1452,7 +1506,6 @@ carregarPessoas();
     clearTimeout(timer);
     timer = setTimeout(()=>{
       const sugestoes = sugerirPorTexto(q);
-      console.log('🔍 Sugestões de cliente para resquício (texto):', q, sugestoes);
       preencherDatalist('lista-clientes-residuo', sugestoes);
     }, 200);
   });
