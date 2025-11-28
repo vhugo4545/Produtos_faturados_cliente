@@ -130,6 +130,18 @@ const PedidoVidroSchema = new mongoose.Schema(
       required: false,
     },
 
+    // 🔹 informação de agrupamento (grupo na tela)
+    grupoNome: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    grupoTipo: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     vidro: { type: String, trim: true, default: "" },
     tipo: { type: String, trim: true, default: "" },
     quantidade: { type: Number, default: 0 },
@@ -179,6 +191,7 @@ const PedidoVidroSchema = new mongoose.Schema(
       default: "",
     },
 
+    // 🔹 Qualquer estrutura auxiliar (totais do popup, telefone fornecedor, etc.)
     meta: mongoose.Schema.Types.Mixed,
   },
   { timestamps: true }
@@ -238,11 +251,10 @@ const PedidoVidro = mongoose.model("PedidoVidro", PedidoVidroSchema);
 
 /**
  * Garante que todo produto tenha:
- * - fornecedor
- * - numeroNotaFiscal
- * - formaPagamento
- * - observacao
+ * - fornecedor / grupoNome / grupoTipo
+ * - numeroNotaFiscal / formaPagamento / observacao
  * + normaliza strings / números / datas
+ * + preserva meta (Mixed) como vier
  */
 function normalizeProdutoPayload(body = {}) {
   console.log("🧾 [NORMALIZE] Body bruto recebido:", body);
@@ -258,25 +270,34 @@ function normalizeProdutoPayload(body = {}) {
   payload.numeroPedidoFornecedor = cleanKey(payload.numeroPedidoFornecedor || "");
   payload.numeroOrcFornecedor = cleanKey(payload.numeroOrcFornecedor || "");
 
+  // 🔹 grupo (pra agrupar na tela)
+  payload.grupoNome = cleanKey(payload.grupoNome || "");
+  payload.grupoTipo = cleanKey(payload.grupoTipo || "");
+
   payload.numeroNotaFiscal = cleanKey(payload.numeroNotaFiscal || "");
   payload.formaPagamento = cleanKey(payload.formaPagamento || "");
   payload.observacao = String(payload.observacao || "").trim();
 
-  // números
-  payload.quantidade = Number(payload.quantidade || 0);
-  payload.valorTotalPedido = Number(payload.valorTotalPedido || 0);
-  payload.valorTotalFaturamentoDiretoOrcado = Number(
-    payload.valorTotalFaturamentoDiretoOrcado || 0
+  // números – aceita Number ou string (se vier formatado tipo "R$ 1.234,56")
+  payload.quantidade = toNumberBR(payload.quantidade);
+  payload.valorTotalPedido = toNumberBR(payload.valorTotalPedido);
+  payload.valorTotalFaturamentoDiretoOrcado = toNumberBR(
+    payload.valorTotalFaturamentoDiretoOrcado
   );
-  payload.valorTotalNFProdutos = Number(payload.valorTotalNFProdutos || 0);
-  payload.valorTotalNFServicos = Number(payload.valorTotalNFServicos || 0);
-  payload.valorReal = Number(payload.valorReal || 0);
+  payload.valorTotalNFProdutos = toNumberBR(payload.valorTotalNFProdutos);
+  payload.valorTotalNFServicos = toNumberBR(payload.valorTotalNFServicos);
+  payload.valorReal = toNumberBR(payload.valorReal);
 
   // datas flexíveis
   if (payload.previsao) payload.previsao = parseDateFlexible(payload.previsao);
   if (payload.vidrosProntos)
     payload.vidrosProntos = parseDateFlexible(payload.vidrosProntos);
   if (payload.naEmpresa) payload.naEmpresa = parseDateFlexible(payload.naEmpresa);
+
+  // meta é Mixed → deixamos como veio (pode ter totaisSelecaoOmie, telefone fornecedor, etc.)
+  if (payload.meta && typeof payload.meta === "object") {
+    payload.meta = { ...payload.meta };
+  }
 
   console.log("✅ [NORMALIZE] Payload normalizado:", payload);
   return payload;
@@ -324,6 +345,8 @@ app.post("/api/produtos", async (req, res) => {
       numeroPedido: created.numeroPedido,
       cliente: created.cliente,
       vidro: created.vidro,
+      grupoNome: created.grupoNome,
+      grupoTipo: created.grupoTipo,
       valorReal: created.valorReal,
     });
 
@@ -394,6 +417,8 @@ app.put("/api/produtos/:id", async (req, res) => {
       numeroPedido: updated.numeroPedido,
       cliente: updated.cliente,
       vidro: updated.vidro,
+      grupoNome: updated.grupoNome,
+      grupoTipo: updated.grupoTipo,
       valorReal: updated.valorReal,
     });
 
@@ -427,6 +452,8 @@ app.delete("/api/produtos/:id", async (req, res) => {
       numeroPedido: removed.numeroPedido,
       cliente: removed.cliente,
       vidro: removed.vidro,
+      grupoNome: removed.grupoNome,
+      grupoTipo: removed.grupoTipo,
       valorReal: removed.valorReal,
     });
 
