@@ -485,7 +485,7 @@ let itens = [];
 let itensRemovidosIds = new Set();
 let filtroGrupoTipo = 'todos'; // 'todos' | 'produto' | 'vidro'
 
-// nomes de vidros/insumos presentes na rota de vidros (Heroku)
+// nomes de vidros/insumos presentes (não usamos mais pra recarregar, mas deixei global se precisar)
 let nomesProdutosPedido = new Set();
 
 let cabecalho = {
@@ -521,6 +521,78 @@ function getPedidoParam(){
 function isMaoDeObraHoraNome(nome){
   const n = String(nome||'').trim();
   return n === 'Mão de Obra de Instalação (por Hora)';
+}
+
+/* =========================
+   MONTA ITENS APENAS DO MONGO
+   (quando já existe algo salvo)
+   ========================= */
+function montarItensAPartirDoMongo(docsPedido){
+  console.log('📌 montarItensAPartirDoMongo() – docsPedido:', docsPedido);
+
+  const lista = Array.isArray(docsPedido) ? docsPedido : [];
+
+  itens = lista.map(doc => ({
+    ...doc,
+    grupoNome: (doc.meta && doc.meta.grupoNome) || 'Manual',
+    grupoTipo: (doc.meta && doc.meta.grupoTipo) || 'outro'
+  }));
+
+  const first = lista[0] || {};
+
+  // Cabeçalho pelo banco
+  cabecalho.numeroPedido = String(first.numeroPedido || getPedidoParam() || '');
+  cabecalho.cliente      = first.cliente   || '';
+  cabecalho.fornecedor   = first.fornecedor|| '';
+  cabecalho.vendedor     = first.vendedor  || first.responsavelVendedor || '';
+
+  cabecalho.observacao     = first.observacao || '';
+  cabecalho.numeroNF       = first.numeroNotaFiscal || '';
+  cabecalho.formaPagamento = first.formaPagamento || '';
+
+  if (first.meta){
+    cabecalho.telefoneFornecedor   = first.meta.telefoneFornecedor   || '';
+    cabecalho.emailFornecedor      = first.meta.emailFornecedor      || '';
+    cabecalho.codigoFornecedorOmie = first.meta.codigoFornecedorOmie || '';
+  }
+
+  $('#titulo').textContent = cabecalho.numeroPedido
+    ? `Pedido ${cabecalho.numeroPedido}`
+    : 'Pedido';
+
+  $('#p-numero').value           = cabecalho.numeroPedido;
+  $('#p-cliente').value          = cabecalho.cliente;
+  $('#p-fornecedor').value       = cabecalho.fornecedor;
+  $('#p-vendedor').value         = cabecalho.vendedor;
+  $('#p-observacao-input').value = cabecalho.observacao;
+  $('#nf-numero').value          = cabecalho.numeroNF;
+  $('#forma-pag').value          = cabecalho.formaPagamento;
+
+  $('#p-forn-telefone').value = cabecalho.telefoneFornecedor || '';
+  $('#p-forn-email').value    = cabecalho.emailFornecedor || '';
+  $('#p-forn-codigo').value   = cabecalho.codigoFornecedorOmie || '';
+
+  totaisSistema.valorTotalPedido             = Number(first.valorTotalPedido||0);
+  totaisSistema.valorFaturamentoDiretoOrcado = Number(first.valorTotalFaturamentoDiretoOrcado||0);
+  totaisSistema.valorAproximadoUF            = Number(first.valorAproximadoUF||0);
+  totaisSistema.valorNFProdutos              = Number(first.valorTotalNFProdutos||0);
+  totaisSistema.valorNFServicos              = Number(first.valorTotalNFServicos||0);
+  totaisSistema.residuoDiferencaFaturamentoServico =
+    Number(first.residuoDiferencaFaturamentoServico||0);
+
+  $('#t-valor-total-pedido').value = fmtBRL(totaisSistema.valorTotalPedido);
+  $('#t-valor-fatur-direto').value = fmtBRL(totaisSistema.valorFaturamentoDiretoOrcado);
+  $('#t-valor-uf').value           = fmtBRL(totaisSistema.valorAproximadoUF);
+  $('#t-nf-produtos').value        = fmtBRL(totaisSistema.valorNFProdutos);
+  $('#t-nf-servicos').value        = fmtBRL(totaisSistema.valorNFServicos);
+  $('#t-dif-fatur-serv').value     = fmtBRL(totaisSistema.residuoDiferencaFaturamentoServico);
+
+  atualizarPrevisaoCabecalho();
+  renderTabela();
+  recalcularTotaisLocais();
+  setStatus('ok');
+
+  console.log('✅ montarItensAPartirDoMongo() finalizado. Itens em memória:', itens);
 }
 
 // =================== RENDER TABELA COM GRUPOS ===================
@@ -763,15 +835,34 @@ async function salvarAlteracoes(){
   try{
     let okCount = 0;
 
-    // deletes
+    // 🔄 SINCRONIZA CABEÇALHO COM O QUE ESTÁ NA TELA ANTES DE QUALQUER COISA
+    cabecalho.numeroPedido        = ($('#p-numero')?.value || '').trim();
+    cabecalho.cliente             = ($('#p-cliente')?.value || '').trim();
+    cabecalho.fornecedor          = ($('#p-fornecedor')?.value || '').trim();
+    cabecalho.vendedor            = ($('#p-vendedor')?.value || '').trim();
+    cabecalho.observacao          = $('#p-observacao-input')?.value || '';
+    cabecalho.numeroNF            = ($('#nf-numero')?.value || '').trim();
+    cabecalho.formaPagamento      = ($('#forma-pag')?.value || '').trim();
+    cabecalho.telefoneFornecedor  = ($('#p-forn-telefone')?.value || '').trim();
+    cabecalho.emailFornecedor     = ($('#p-forn-email')?.value || '').trim();
+    cabecalho.codigoFornecedorOmie= ($('#p-forn-codigo')?.value || '').trim();
+
+    // Também garante totais sincronizados (caso o usuário não tenha saído do campo)
+    totaisSistema.valorTotalPedido             = moneyToNumber($('#t-valor-total-pedido')?.value || 0);
+    totaisSistema.valorFaturamentoDiretoOrcado = moneyToNumber($('#t-valor-fatur-direto')?.value || 0);
+    totaisSistema.valorAproximadoUF            = moneyToNumber($('#t-valor-uf')?.value || 0);
+    totaisSistema.valorNFProdutos              = moneyToNumber($('#t-nf-produtos')?.value || 0);
+    totaisSistema.valorNFServicos              = moneyToNumber($('#t-nf-servicos')?.value || 0);
+    totaisSistema.residuoDiferencaFaturamentoServico =
+      moneyToNumber($('#t-dif-fatur-serv')?.value || 0);
+
+    // 🗑 Deletar itens removidos
     console.log('🗑 Itens a deletar (ids):', Array.from(itensRemovidosIds));
     for (const id of itensRemovidosIds){
       try{
         const urlDel = `${BASE_URL}/api/produtos/${id}`;
         console.log('🗑 [DELETE] Chamando:', urlDel);
-        const respDel = await fetch(urlDel, {
-          method:'DELETE'
-        });
+        const respDel = await fetch(urlDel, { method:'DELETE' });
         const bodyDel = await respDel.text().catch(()=>null);
         console.log('🗑 [DELETE] Resposta:', { status: respDel.status, body: bodyDel });
       }catch(e){
@@ -780,47 +871,38 @@ async function salvarAlteracoes(){
     }
     itensRemovidosIds.clear();
 
-    // upserts
+    // 💾 Upsert (cria/atualiza) cada item
     for(const it of itens){
       const {_id, createdAt, updatedAt, __v, ...rest} = it;
       const clone = { ...rest };
 
-      clone.numeroPedido = cabecalho.numeroPedido || clone.numeroPedido;
-      clone.cliente      = cabecalho.cliente      || clone.cliente;
+      // Número do pedido e cliente sempre do cabeçalho
+      clone.numeroPedido = cabecalho.numeroPedido || clone.numeroPedido || getPedidoParam();
+      clone.cliente      = cabecalho.cliente      || clone.cliente      || $('#p-cliente')?.value || '';
 
-      // fornecedor por linha – se não tiver, assume do cabeçalho
-      if (!clone.fornecedor && cabecalho.fornecedor) {
-        clone.fornecedor = cabecalho.fornecedor;
-      }
+      // ⚠️ ESTES CAMPOS SEMPRE DEVEM SEGUIR O CABEÇALHO
+      clone.fornecedor           = cabecalho.fornecedor || '';
+      clone.responsavelVendedor  = cabecalho.vendedor   || clone.responsavelVendedor || clone.vendedor || '';
+      clone.numeroNotaFiscal     = cabecalho.numeroNF   || '';
+      clone.formaPagamento       = cabecalho.formaPagamento || '';
+      clone.observacao           = cabecalho.observacao || '';
 
-      // vendedor → responsavelVendedor no back
-      if (cabecalho.vendedor) {
-        clone.responsavelVendedor = cabecalho.vendedor;
-      }
+      // Evita manter campo "vendedor" duplicado
+      delete clone.vendedor;
 
-      // NF, forma de pagamento e observação por linha
-      if (!clone.numeroNotaFiscal && cabecalho.numeroNF) {
-        clone.numeroNotaFiscal = cabecalho.numeroNF;
-      }
-      if (!clone.formaPagamento && cabecalho.formaPagamento) {
-        clone.formaPagamento = cabecalho.formaPagamento;
-      }
-      if (!clone.observacao && cabecalho.observacao) {
-        clone.observacao = cabecalho.observacao;
-      }
+      // Totais por linha (mesmos para todo mundo)
+      clone.valorTotalPedido                      = totaisSistema.valorTotalPedido;
+      clone.valorTotalFaturamentoDiretoOrcado     = totaisSistema.valorFaturamentoDiretoOrcado;
+      clone.valorAproximadoUF                     = totaisSistema.valorAproximadoUF;
+      clone.valorTotalNFProdutos                  = totaisSistema.valorNFProdutos;
+      clone.valorTotalNFServicos                  = totaisSistema.valorNFServicos;
+      clone.residuoDiferencaFaturamentoServico    = totaisSistema.residuoDiferencaFaturamentoServico;
 
-      // Totais por linha (mesmo valor para todas as linhas deste pedido)
-      clone.valorTotalPedido             = totaisSistema.valorTotalPedido;
-      clone.valorTotalFaturamentoDiretoOrcado = totaisSistema.valorFaturamentoDiretoOrcado;
-      clone.valorAproximadoUF            = totaisSistema.valorAproximadoUF;
-      clone.valorTotalNFProdutos         = totaisSistema.valorNFProdutos;
-      clone.valorTotalNFServicos         = totaisSistema.valorNFServicos;
-      clone.residuoDiferencaFaturamentoServico = totaisSistema.residuoDiferencaFaturamentoServico;
-
+      // Meta com dados do fornecedor
       clone.meta = { ...(clone.meta || {}) };
-      if(cabecalho.telefoneFornecedor) clone.meta.telefoneFornecedor = cabecalho.telefoneFornecedor;
-      if(cabecalho.emailFornecedor)    clone.meta.emailFornecedor    = cabecalho.emailFornecedor;
-      if(cabecalho.codigoFornecedorOmie) clone.meta.codigoFornecedorOmie = cabecalho.codigoFornecedorOmie;
+      if (cabecalho.telefoneFornecedor)   clone.meta.telefoneFornecedor   = cabecalho.telefoneFornecedor;
+      if (cabecalho.emailFornecedor)      clone.meta.emailFornecedor      = cabecalho.emailFornecedor;
+      if (cabecalho.codigoFornecedorOmie) clone.meta.codigoFornecedorOmie = cabecalho.codigoFornecedorOmie;
 
       if(_id){
         const urlPut = `${BASE_URL}/api/produtos/${_id}`;
@@ -855,6 +937,10 @@ async function salvarAlteracoes(){
     alert(`✅ ${okCount} item(ns) salvo(s) com sucesso.`);
     console.log('✅ salvarAlteracoes concluído. Itens salvos com sucesso:', okCount);
     setStatus('ok');
+
+    // 🔁 Recarrega a tela já a partir do Mongo (com OBS e FORNECEDOR atualizados)
+    await carregar();
+
   }catch(err){
     console.error('💥 Erro em salvarAlteracoes:', err);
     setStatus('erro');
@@ -895,7 +981,9 @@ document.getElementById('btn-salvar')?.addEventListener('click', salvarAlteracoe
   });
 })();
 
-// carregar pedido + proposta + insumos
+/* =========================
+   CARREGAR PEDIDO
+   ========================= */
 async function carregar(){
   const numeroPedido = getPedidoParam();
   if(!numeroPedido){
@@ -923,63 +1011,26 @@ async function carregar(){
     console.log('📡 [GET] /api/produtos status:', rProd.status);
     console.log('📡 [GET] /api/propostas status:', rPropAll.status);
 
-    // ----- produtos do pedido (server vidro) -----
+    // ----- produtos do pedido (Mongo) -----
     const jProd = await rProd.json().catch(()=>({ raw:'não foi possível parsear JSON de produtos' }));
     console.log('📥 Resposta produtos (PedidoVidro):', jProd);
 
-    if(!jProd.ok){
-      console.warn('Falha ao carregar produtos do pedido', jProd);
-    }
     const docsPedido = Array.isArray(jProd.data)
       ? jProd.data.filter(d => String(d.numeroPedido || '') === numeroPedidoStr)
       : [];
 
     console.log('📊 docsPedido filtrados pelo numeroPedido:', docsPedido);
 
-    const first = docsPedido[0] || {};
+    // SE JÁ EXISTE QUALQUER ITEM NO MONGO → ELE É A VERDADE
+    if (docsPedido.length > 0){
+      console.log('📌 Pedido já possui itens salvos no Mongo. NÃO vou recriar a partir da proposta.');
+      montarItensAPartirDoMongo(docsPedido);
+      return;
+    }
 
-    // nomes de vidros/insumos presentes na rota de vidros (Heroku)
-    nomesProdutosPedido = new Set();
-    docsPedido.forEach(d=>{
-      const nome = (d.vidro || '').trim();
-      if(nome) nomesProdutosPedido.add(nome.toLowerCase());
-    });
-    console.log('🧾 nomesProdutosPedido (SET):', nomesProdutosPedido);
+    console.log('🆕 Pedido ainda NÃO tem itens salvos. Vou montar a partir da proposta.');
 
-    // cabeçalho a partir do PedidoVidro
-    cabecalho.numeroPedido = numeroPedidoStr;
-    cabecalho.cliente      = first.cliente   || '';
-    cabecalho.fornecedor   = first.fornecedor|| '';
-    cabecalho.vendedor     = first.vendedor  || first.responsavelVendedor || '';
-
-    cabecalho.observacao     = first.observacao || '';
-    cabecalho.numeroNF       = first.numeroNotaFiscal || '';
-    cabecalho.formaPagamento = first.formaPagamento || '';
-
-    $('#titulo').textContent = `Pedido ${numeroPedidoStr}`;
-    $('#p-numero').value     = cabecalho.numeroPedido;
-    $('#p-cliente').value    = cabecalho.cliente;
-    $('#p-fornecedor').value = cabecalho.fornecedor;
-    $('#p-vendedor').value   = cabecalho.vendedor;
-    $('#p-observacao-input').value = cabecalho.observacao;
-    $('#nf-numero').value    = cabecalho.numeroNF;
-    $('#forma-pag').value    = cabecalho.formaPagamento;
-
-    totaisSistema.valorTotalPedido             = Number(first.valorTotalPedido||0);
-    totaisSistema.valorFaturamentoDiretoOrcado = Number(first.valorTotalFaturamentoDiretoOrcado||0);
-    totaisSistema.valorAproximadoUF            = Number(first.valorAproximadoUF||0);
-    totaisSistema.valorNFProdutos              = Number(first.valorTotalNFProdutos||0);
-    totaisSistema.valorNFServicos              = Number(first.valorTotalNFServicos||0);
-    totaisSistema.residuoDiferencaFaturamentoServico = Number(first.residuoDiferencaFaturamentoServico||0);
-
-    $('#t-valor-total-pedido').value = fmtBRL(totaisSistema.valorTotalPedido);
-    $('#t-valor-fatur-direto').value = fmtBRL(totaisSistema.valorFaturamentoDiretoOrcado);
-    $('#t-valor-uf').value           = fmtBRL(totaisSistema.valorAproximadoUF);
-    $('#t-nf-produtos').value        = fmtBRL(totaisSistema.valorNFProdutos);
-    $('#t-nf-servicos').value        = fmtBRL(totaisSistema.valorNFServicos);
-    $('#t-dif-fatur-serv').value     = fmtBRL(totaisSistema.residuoDiferencaFaturamentoServico);
-
-    // ----- propostas (server proposta) -----
+    // ===== A partir daqui só roda para pedido NOVO (sem itens no banco) =====
     if(!rPropAll.ok){
       console.warn('Falha ao carregar lista de propostas', rPropAll.status);
       itens = [];
@@ -1008,7 +1059,7 @@ async function carregar(){
     console.log('🔎 Proposta selecionada para o pedido:', proposta);
 
     if(!proposta){
-      alert('Não encontrei proposta com este número. Vou carregar apenas o cabeçalho do pedido.');
+      alert('Não encontrei proposta com este número. Vou deixar a tela vazia para edição manual.');
       itens = [];
       atualizarPrevisaoCabecalho();
       renderTabela();
@@ -1026,6 +1077,9 @@ async function carregar(){
     console.log('🧩 grupos da proposta:', grupos);
     console.log('📅 previsaoGlobal da proposta:', previsaoGlobal);
 
+    nomesProdutosPedido = new Set();
+    console.log('🧾 nomesProdutosPedido (SET inicial em pedido novo):', nomesProdutosPedido);
+
     itens = [];
 
     grupos.forEach(grupo=>{
@@ -1042,34 +1096,14 @@ async function carregar(){
         ? (produtoCab.nome_produto || grupo.nome || '')
         : (grupo.nome || '');
 
-      // ---- filtro: só grupos presentes no PedidoVidro ----
-      let deveIncluir = false;
-      if (produtoCab){
-        const nomePA = String(produtoCab.nome_produto || '').trim().toLowerCase();
-        if (nomesProdutosPedido.size === 0 || nomesProdutosPedido.has(nomePA)){
-          deveIncluir = true;
-        }
-      } else {
-        const nomeGrupo = String(grupo.nome || '').trim().toLowerCase();
-        if (nomeGrupo === 'vidro' && nomesProdutosPedido.size > 0){
-          deveIncluir = true;
-        }
-      }
-      console.log('📦 Grupo analisado:', { grupoNome: grupoLabelBase, grupoTipo, deveIncluir });
+      const deveIncluir = true;
+      console.log('📦 Grupo analisado (pedido novo):', { grupoNome: grupoLabelBase, grupoTipo, deveIncluir });
 
       if (!deveIncluir) return;
-      // -----------------------------------------------
 
       itensGrupo.forEach(ins=>{
         const nomeProduto = String(ins.nome_produto || '').trim();
         const descUtil    = String(ins.descricao_utilizacao || '').trim();
-
-        // PRIORIDADE DA ROTA DE VIDROS (HEROKU)
-        if (nomesProdutosPedido.size > 0 &&
-            !nomesProdutosPedido.has(nomeProduto.toLowerCase())) {
-          console.log('⏭ Insumo ignorado (não está em nomesProdutosPedido):', nomeProduto);
-          return;
-        }
 
         if (isMaoDeObraHoraNome(nomeProduto)) {
           console.log('⏭ Insumo ignorado (Mão de Obra por hora):', nomeProduto);
@@ -1081,10 +1115,10 @@ async function carregar(){
         }
 
         const itemPush = {
-          numeroPedido: cabecalho.numeroPedido,
-          cliente:      cabecalho.cliente,
-          fornecedor:   cabecalho.fornecedor,
-          vendedor:     cabecalho.vendedor,
+          numeroPedido: numeroPedidoStr,
+          cliente:      cf.nomeCliente || '',
+          fornecedor:   '',
+          vendedor:     cf.vendedorResponsavel || '',
 
           vidro:        nomeProduto,
           tipo:         descUtil || 'Reto',
@@ -1098,12 +1132,12 @@ async function carregar(){
           previsao:         previsaoGlobal || '',
           numeroPedidoFornecedor: '',
           numeroOrcFornecedor:   '',
-          numeroNotaFiscal:      cabecalho.numeroNF || '',
-          formaPagamento:        cabecalho.formaPagamento || '',
+          numeroNotaFiscal:      '',
+          formaPagamento:        '',
           vidrosProntos: '',
           naEmpresa:     '',
           faturamento:   'Ferreira Ulhoa',
-          observacao:    cabecalho.observacao || '',
+          observacao:    '',
           valorReal:     ins.custo || 0,
 
           grupoNome: grupoLabelBase,
@@ -1111,6 +1145,7 @@ async function carregar(){
 
           meta: {
             grupoNome:           grupoLabelBase,
+            grupoTipo,
             codigoOmie:          ins.codigo_omie || '',
             quantidadeOriginal:  ins.quantidade,
             quantidadeDesejada:  ins.quantidade_desejada
@@ -1122,13 +1157,25 @@ async function carregar(){
       });
     });
 
-    console.log('📋 itens finais depois do carregar():', itens);
+    console.log('📋 itens finais depois do carregar() (pedido novo a partir da proposta):', itens);
 
+    cabecalho.numeroPedido = numeroPedidoStr;
+    cabecalho.cliente      = cf.nomeCliente || '';
+    cabecalho.vendedor     = cf.vendedorResponsavel || '';
+
+    $('#titulo').textContent       = `Pedido ${numeroPedidoStr}`;
+    $('#p-numero').value           = cabecalho.numeroPedido;
+    $('#p-cliente').value          = cabecalho.cliente;
+    $('#p-vendedor').value         = cabecalho.vendedor;
+    $('#p-observacao-input').value = cabecalho.observacao;
+    $('#nf-numero').value          = cabecalho.numeroNF;
+    $('#forma-pag').value          = cabecalho.formaPagamento;
+
+    recalcularTotaisLocais();
     atualizarPrevisaoCabecalho();
     renderTabela();
-    recalcularTotaisLocais();
     setStatus('ok');
-    console.log('✅ carregar() finalizado com sucesso.');
+    console.log('✅ carregar() finalizado com sucesso (pedido novo).');
     
   }catch(e){
     console.error('💥 Erro em carregar():', e);
@@ -1176,7 +1223,6 @@ function initPopupResiduo(){
   const btnEnviar   = document.getElementById('btn-enviar-residuo');
   const inputCliente = document.getElementById('residuo-cliente-nome');
 
-  // Abrir popup com detalhes do cálculo
   btn.addEventListener('click', ()=>{
     const totalReal = itens.reduce((acc,i)=> acc + Number(i.valorReal||0), 0);
     const fatDir    = totaisSistema.valorFaturamentoDiretoOrcado || 0;
@@ -1203,7 +1249,6 @@ function initPopupResiduo(){
     popup.style.display = 'flex';
   });
 
-  // Máscara simples de moeda no campo de valor
   if(inputValor){
     inputValor.addEventListener('blur', (e)=>{
       const num = moneyToNumber(e.target.value);
@@ -1214,7 +1259,6 @@ function initPopupResiduo(){
     });
   }
 
-  // Clique em enviar resquício
   if(btnEnviar){
     btnEnviar.addEventListener('click', async ()=>{
       const nomeCliente = (inputCliente?.value || '').trim();
@@ -1245,25 +1289,9 @@ function initPopupResiduo(){
       alert('Resquício preparado. Veja os detalhes no console para integrar com seu backend/Omie.');
 
       popup.style.display = 'none';
-
-      /*
-      try{
-        const r = await fetch('SUA_URL_DE_ENVIO_AQUI', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
-        });
-        const j = await r.json();
-        console.log('Resposta envio resquício:', j);
-      }catch(err){
-        console.error('Erro ao enviar resquício:', err);
-        alert('Erro ao enviar resquício. Veja detalhes no console.');
-      }
-      */
     });
   }
 
-  // Fechar popup ao clicar fora ou no botão Fechar
   popup.addEventListener('click', e=>{
     if(e.target === popup || e.target.closest('[data-close-residuo]')){
       popup.style.display = 'none';
@@ -1315,7 +1343,6 @@ async function carregarPessoas(){
     console.log('📊 Pessoas carregadas (qtde):', cachePessoas.length);
 
     preencherDatalist('lista-fornecedores', cachePessoas);
-    // também alimenta o datalist do popup de resquício
     preencherDatalist('lista-clientes-residuo', cachePessoas);
   }catch(e){
     console.warn('Falha ao carregar pessoas:', e);
