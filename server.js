@@ -13,6 +13,8 @@ const {
   PORT = 3000,
   OMIE_APP_KEY = "CHANGEME",
   OMIE_APP_SECRET = "CHANGEME",
+  OMIE_APP_KEY_SERVICOS = "CHANGEME",
+  OMIE_APP_SECRET_SERVICOS = "CHANGEME",
   JWT_SECRET = "CHANGEME",
   JWT_REFRESH = "CHANGEME",
 } = process.env;
@@ -530,13 +532,12 @@ app.delete("/api/produtos/:id", async (req, res) => {
 });
 
 /* =======================
-   🔹 Nova rota Omie - Comissão
-   ======================= *//* =======================
    URLs Omie
    ======================= */
 const OMIE_URL = "https://app.omie.com.br/api/v1/financas/contapagar/";
 // Contas a receber (resquício)
-const OMIE_URL_RECEBER = "https://app.omie.com.br/api/v1/financas/contareceber/";
+const OMIE_URL_RECEBER =
+  "https://app.omie.com.br/api/v1/financas/contareceber/";
 
 /* =======================
    🔹 Nova rota Omie - Resquício (Contas a Receber)
@@ -663,10 +664,13 @@ app.post("/api/omie/resquicio", async (req, res) => {
 
     res.json({ ok: true, omie });
   } catch (err) {
-    console.error("💥 [RESQUICIO] Erro inesperado em POST /api/omie/resquicio:", {
-      message: err?.message,
-      stack: err?.stack,
-    });
+    console.error(
+      "💥 [RESQUICIO] Erro inesperado em POST /api/omie/resquicio:",
+      {
+        message: err?.message,
+        stack: err?.stack,
+      }
+    );
     res.status(500).json({
       ok: false,
       error: "Falha ao enviar resquício (conta a receber) para Omie.",
