@@ -590,8 +590,8 @@ app.post("/api/omie/resquicio", async (req, res) => {
     // =============== payload Omie ===============
     const payload = {
       call: "IncluirContaReceber",
-      app_key: OMIE_APP_KEY,
-      app_secret: OMIE_APP_SECRET,
+      app_key: OMIE_APP_KEY_SERVICOS,
+      app_secret: OMIE_APP_SECRET_SERVICOS,
       param: [
         {
           codigo_lancamento_integracao: String(Date.now()),
