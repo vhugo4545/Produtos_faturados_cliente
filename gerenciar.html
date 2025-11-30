@@ -455,11 +455,12 @@
   </div>
 </div>
 
-<!-- Popup Resquício -->
+<!-- Popup Resquício (ATUALIZADO) -->
 <div id="popup-residuo" class="modal-backdrop">
   <div class="modal-card">
     <h3>Detalhamento do resquício</h3>
 
+    <!-- Detalhe do cálculo -->
     <p id="residuo-formula" class="muted">
       Fórmula: Faturamento direto + NF serviços − Valor real (total).
     </p>
@@ -471,6 +472,7 @@
       Este valor considera os totais digitados acima e a soma atual dos valores reais dos itens.
     </p>
 
+    <!-- Formulário de lançamento do resquício -->
     <div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--border);">
       <div class="row" style="grid-template-columns:140px 1fr;margin:4px 0;">
         <label for="residuo-cliente-nome">Cliente</label>
@@ -482,7 +484,7 @@
         <datalist id="lista-clientes-residuo"></datalist>
       </div>
 
-      <div class="row" style="grid-template-columns:140px 1fr;margin:4px 0;">
+      <div class="row" style="grid-template-columns:140px 1fr;margin:4px 0%;">
         <label for="residuo-valor-input">Valor</label>
         <input
           id="residuo-valor-input"
@@ -493,6 +495,7 @@
       </div>
     </div>
 
+    <!-- Botões -->
     <div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px;">
       <button type="button" class="btn btn-primary" id="btn-enviar-residuo">
         Enviar
@@ -542,8 +545,8 @@ let itens = [];
 let itensRemovidosIds = new Set();
 let filtroGrupoTipo = 'todos'; // 'todos' | 'produto' | 'vidro'
 
-// mapa de nomes (vidros/produtos) presentes na rota de vidros
-let nomesProdutosVidro = new Set();
+// nomes de vidros/insumos presentes
+let nomesProdutosPedido = new Set();
 
 let cabecalho = {
   numeroPedido: '',
@@ -575,17 +578,126 @@ function getPedidoParam(){
   return u.searchParams.get('pedido') || '';
 }
 
-/* Nome que nunca deve aparecer na tela */
+/* 🔎 Nome que NUNCA deve aparecer na tela */
 function isMaoDeObraHoraNome(nome){
   const n = String(nome||'').trim();
   return n === 'Mão de Obra de Instalação (por Hora)';
 }
 
 /* =========================
-   RENDER TABELA
+   MONTA ITENS A PARTIR DO MONGO (PRIORIDADE)
    ========================= */
+function montarItensAPartirDoMongo(docsPedido){
+  console.log('📌 montarItensAPartirDoMongo() – docsPedido (bruto):', docsPedido);
+
+  const lista = Array.isArray(docsPedido)
+    ? docsPedido.filter(doc => !isMaoDeObraHoraNome(doc.vidro)) // 🔥 FILTRA MÃO DE OBRA POR HORA
+    : [];
+
+  console.log('📌 montarItensAPartirDoMongo() – lista filtrada (sem Mão de Obra):', lista);
+
+  itens = lista.map(doc => {
+    const meta = doc.meta || {};
+
+    const itemMontado = {
+      _id: doc._id,
+      numeroPedido: String(doc.numeroPedido || ''),
+      cliente: doc.cliente || '',
+
+      fornecedor: doc.fornecedor || '',
+      grupoNome: doc.grupoNome || meta.grupoNome || 'Manual',
+      grupoTipo: doc.grupoTipo || meta.grupoTipo || 'outro',
+
+      vidro: doc.vidro || '',
+      tipo: doc.tipo || 'Reto',
+      quantidade: Number(doc.quantidade ?? 0),
+
+      orcamentoEnviado: doc.orcamentoEnviado || '',
+      aprovacao: doc.aprovacao || '',
+      moldeEnviado: doc.moldeEnviado || '',
+      recebemosLinkPagamento: doc.recebemosLinkPagamento || '',
+      pagamento: doc.pagamento || '',
+
+      previsao: doc.previsao || '',
+      numeroPedidoFornecedor: doc.numeroPedidoFornecedor || '',
+      numeroOrcFornecedor: doc.numeroOrcFornecedor || '',
+
+      numeroNotaFiscal: doc.numeroNotaFiscal || '',
+      formaPagamento: doc.formaPagamento || '',
+      vidrosProntos: doc.vidrosProntos || '',
+      naEmpresa: doc.naEmpresa || '',
+      faturamento: doc.faturamento || 'Ferreira Ulhoa',
+      observacao: doc.observacao || '',
+
+      valorReal: Number(doc.valorReal || 0),
+
+      meta: meta,
+    };
+
+    console.log('🧩 Item montado a partir do Mongo:', itemMontado);
+    return itemMontado;
+  });
+
+  const first = lista[0] || {};
+  const firstMeta = first.meta || {};
+
+  cabecalho.numeroPedido = String(first.numeroPedido || getPedidoParam() || '');
+  cabecalho.cliente      = first.cliente   || '';
+  cabecalho.fornecedor   = first.fornecedor|| '';
+  cabecalho.vendedor     = first.vendedor  || first.responsavelVendedor || '';
+
+  cabecalho.observacao     = first.observacao || '';
+  cabecalho.numeroNF       = first.numeroNotaFiscal || '';
+  cabecalho.formaPagamento = first.formaPagamento || '';
+
+  if (firstMeta){
+    cabecalho.telefoneFornecedor   = firstMeta.telefoneFornecedor   || '';
+    cabecalho.emailFornecedor      = firstMeta.emailFornecedor      || '';
+    cabecalho.codigoFornecedorOmie = firstMeta.codigoFornecedorOmie || '';
+  }
+
+  $('#titulo').textContent = cabecalho.numeroPedido
+    ? `Pedido ${cabecalho.numeroPedido}`
+    : 'Pedido';
+
+  $('#p-numero').value           = cabecalho.numeroPedido;
+  $('#p-cliente').value          = cabecalho.cliente;
+  $('#p-fornecedor').value       = cabecalho.fornecedor;
+  $('#p-vendedor').value         = cabecalho.vendedor;
+  $('#p-observacao-input').value = cabecalho.observacao;
+  $('#nf-numero').value          = cabecalho.numeroNF;
+  $('#forma-pag').value          = cabecalho.formaPagamento;
+
+  $('#p-forn-telefone').value = cabecalho.telefoneFornecedor || '';
+  $('#p-forn-email').value    = cabecalho.emailFornecedor || '';
+  $('#p-forn-codigo').value   = cabecalho.codigoFornecedorOmie || '';
+
+  totaisSistema.valorTotalPedido             = Number(first.valorTotalPedido||0);
+  totaisSistema.valorFaturamentoDiretoOrcado = Number(first.valorTotalFaturamentoDiretoOrcado||0);
+  totaisSistema.valorAproximadoUF            = Number(first.valorAproximadoUF||0);
+  totaisSistema.valorNFProdutos              = Number(first.valorTotalNFProdutos||0);
+  totaisSistema.valorNFServicos              = Number(first.valorTotalNFServicos||0);
+  totaisSistema.residuoDiferencaFaturamentoServico =
+    Number(first.residuoDiferencaFaturamentoServico||0);
+
+  $('#t-valor-total-pedido').value = fmtBRL(totaisSistema.valorTotalPedido);
+  $('#t-valor-fatur-direto').value = fmtBRL(totaisSistema.valorFaturamentoDiretoOrcado);
+  $('#t-valor-uf').value           = fmtBRL(totaisSistema.valorAproximadoUF);
+  $('#t-nf-produtos').value        = fmtBRL(totaisSistema.valorNFProdutos);
+  $('#t-nf-servicos').value        = fmtBRL(totaisSistema.valorNFServicos);
+  $('#t-dif-fatur-serv').value     = fmtBRL(totaisSistema.residuoDiferencaFaturamentoServico);
+
+  atualizarPrevisaoCabecalho();
+  renderTabela();
+  recalcularTotaisLocais();
+  setStatus('ok');
+
+  console.log('✅ montarItensAPartirDoMongo() finalizado. Itens em memória:', itens);
+}
+
+// =================== RENDER TABELA COM GRUPOS ===================
 function renderTabela(){
-  const tbody = $('#tabela-itens tbody');
+  const tbody = $('#tabela-itens tbody'); 
   tbody.innerHTML='';
 
   const gruposMap = new Map();
@@ -645,6 +757,7 @@ function renderTabela(){
         </div>
       </div>
     `;
+    trHeader.appendChild(document.createTextNode(''));
     trHeader.appendChild(tdHeader);
     tbody.appendChild(trHeader);
 
@@ -682,7 +795,11 @@ function renderTabela(){
       tr.appendChild(td(date(item.recebemosLinkPagamento)));            tr.lastChild.setAttribute('data-k','recebemosLinkPagamento');
       tr.appendChild(td(date(item.pagamento)));                         tr.lastChild.setAttribute('data-k','pagamento');
       tr.appendChild(td(date(item.previsao)));                          tr.lastChild.setAttribute('data-k','previsao');
-      tr.appendChild(td(text(item.fornecedor || cabecalho.fornecedor || '')));   tr.lastChild.setAttribute('data-k','fornecedor');
+
+      // Fornecedor: texto livre por item
+      tr.appendChild(td(text(item.fornecedor ?? '')));   
+      tr.lastChild.setAttribute('data-k','fornecedor');
+
       tr.appendChild(td(text(item.numeroPedidoFornecedor||'')));        tr.lastChild.setAttribute('data-k','numeroPedidoFornecedor');
       tr.appendChild(td(text(item.numeroOrcFornecedor||'')));           tr.lastChild.setAttribute('data-k','numeroOrcFornecedor');
       tr.appendChild(td(text(item.numeroNotaFiscal || cabecalho.numeroNF || '')));   tr.lastChild.setAttribute('data-k','numeroNotaFiscal');
@@ -754,21 +871,6 @@ function renderTabela(){
   $('#t-itens').textContent = itens.length;
   $('#tfoot-total').textContent       = fmtBRL(totalReal);
   $('#t-valor-real-total').value     = fmtBRL(totalReal);
-
-  // toggles de grupo
-  tbody.querySelectorAll('.btn-toggle-grupo').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const grupoId = btn.getAttribute('data-grupo');
-      const collapsed = btn.getAttribute('data-collapsed') === '1';
-      btn.setAttribute('data-collapsed', collapsed ? '0' : '1');
-      btn.textContent = collapsed ? '▾' : '▸';
-
-      tbody.querySelectorAll(`tr[data-grupo="${grupoId}"][data-row="item"]`)
-        .forEach(tr=>{
-          tr.style.display = collapsed ? '' : 'none';
-        });
-    });
-  });
 }
 
 function recalcularTotaisLocais(){
@@ -790,7 +892,7 @@ $('#p-observacao-input').addEventListener('input', e=>{ cabecalho.observacao = e
 $('#nf-numero').addEventListener('input', e=>{ cabecalho.numeroNF = e.target.value; });
 $('#forma-pag').addEventListener('change', e=>{ cabecalho.formaPagamento = e.target.value; });
 
-// novo item manual (já marcado como insumo)
+// novo item manual
 document.getElementById('btn-add-item')?.addEventListener('click', ()=>{
   const numeroPedido = cabecalho.numeroPedido || getPedidoParam();
   const novo = {
@@ -819,22 +921,14 @@ document.getElementById('btn-add-item')?.addEventListener('click', ()=>{
     valorReal: 0,
 
     grupoNome: 'Manual',
-    grupoTipo: 'outro',
-
-    meta: {
-      eInsumo: true,
-      grupoNome: 'Manual',
-      grupoTipo: 'outro'
-    }
+    grupoTipo: 'outro'
   };
   itens.push(novo);
   renderTabela();
   atualizarPrevisaoCabecalho();
 });
 
-/* =========================
-   SALVAR
-   ========================= */
+// salvar
 async function salvarAlteracoes(){
   if(!Array.isArray(itens)){
     alert('Nenhum item para salvar.');
@@ -846,7 +940,6 @@ async function salvarAlteracoes(){
   try{
     let okCount = 0;
 
-    // Sincroniza cabeçalho com tela
     cabecalho.numeroPedido        = ($('#p-numero')?.value || '').trim();
     cabecalho.cliente             = ($('#p-cliente')?.value || '').trim();
     cabecalho.fornecedor          = ($('#p-fornecedor')?.value || '').trim();
@@ -866,7 +959,6 @@ async function salvarAlteracoes(){
     totaisSistema.residuoDiferencaFaturamentoServico =
       moneyToNumber($('#t-dif-fatur-serv')?.value || 0);
 
-    // Deletar itens removidos
     console.log('🗑 Itens a deletar (ids):', Array.from(itensRemovidosIds));
     for (const id of itensRemovidosIds){
       try{
@@ -881,7 +973,6 @@ async function salvarAlteracoes(){
     }
     itensRemovidosIds.clear();
 
-    // Upsert itens
     for(const it of itens){
       const {_id, createdAt, updatedAt, __v, ...rest} = it;
       const clone = { ...rest };
@@ -889,13 +980,32 @@ async function salvarAlteracoes(){
       clone.numeroPedido = cabecalho.numeroPedido || clone.numeroPedido || getPedidoParam();
       clone.cliente      = cabecalho.cliente      || clone.cliente      || $('#p-cliente')?.value || '';
 
-      clone.fornecedor          = cabecalho.fornecedor || '';
-      clone.responsavelVendedor = cabecalho.vendedor   || clone.responsavelVendedor || clone.vendedor || '';
-      clone.numeroNotaFiscal    = cabecalho.numeroNF   || '';
-      clone.formaPagamento      = cabecalho.formaPagamento || '';
-      clone.observacao          = cabecalho.observacao || '';
+      // fornecedor: texto livre por item
+      if (!clone.fornecedor && cabecalho.fornecedor) {
+        clone.fornecedor = cabecalho.fornecedor;
+      } else {
+        clone.fornecedor = clone.fornecedor || '';
+      }
+
+      if (cabecalho.vendedor) {
+        clone.responsavelVendedor = cabecalho.vendedor;
+      } else {
+        clone.responsavelVendedor = clone.responsavelVendedor || clone.vendedor || '';
+      }
 
       delete clone.vendedor;
+
+      if (!clone.numeroNotaFiscal && cabecalho.numeroNF) {
+        clone.numeroNotaFiscal = cabecalho.numeroNF;
+      }
+
+      if (!clone.formaPagamento && cabecalho.formaPagamento) {
+        clone.formaPagamento = cabecalho.formaPagamento;
+      }
+
+      if (!clone.observacao && cabecalho.observacao) {
+        clone.observacao = cabecalho.observacao;
+      }
 
       clone.valorTotalPedido                      = totaisSistema.valorTotalPedido;
       clone.valorTotalFaturamentoDiretoOrcado     = totaisSistema.valorFaturamentoDiretoOrcado;
@@ -905,10 +1015,7 @@ async function salvarAlteracoes(){
       clone.residuoDiferencaFaturamentoServico    = totaisSistema.residuoDiferencaFaturamentoServico;
 
       clone.meta = { ...(clone.meta || {}) };
-      // garante flag de insumo se for linha da tela
-      if (clone.meta.eInsumo === undefined) {
-        clone.meta.eInsumo = true;
-      }
+
       if (cabecalho.telefoneFornecedor)   clone.meta.telefoneFornecedor   = cabecalho.telefoneFornecedor;
       if (cabecalho.emailFornecedor)      clone.meta.emailFornecedor      = cabecalho.emailFornecedor;
       if (cabecalho.codigoFornecedorOmie) clone.meta.codigoFornecedorOmie = cabecalho.codigoFornecedorOmie;
@@ -947,7 +1054,6 @@ async function salvarAlteracoes(){
     console.log('✅ salvarAlteracoes concluído. Itens salvos com sucesso:', okCount);
     setStatus('ok');
 
-    // Recarrega a tela a partir da rota de vidros
     await carregar();
 
   }catch(err){
@@ -959,9 +1065,7 @@ async function salvarAlteracoes(){
 
 document.getElementById('btn-salvar')?.addEventListener('click', salvarAlteracoes);
 
-/* =========================
-   BARRA FILTROS GRUPOS
-   ========================= */
+// barra filtros
 (function initBarraFiltros(){
   const wrap = document.querySelector('.table-wrap');
   if(!wrap) return;
@@ -997,7 +1101,7 @@ document.getElementById('btn-salvar')?.addEventListener('click', salvarAlteracoe
    ========================= */
 async function carregar(){
   const numeroPedido = getPedidoParam();
-  if (!numeroPedido){
+  if(!numeroPedido){
     alert('Pedido não informado');
     hideLoader();
     return;
@@ -1031,118 +1135,33 @@ async function carregar(){
       ? jProd.data.filter(d => String(d.numeroPedido || '') === numeroPedidoStr)
       : [];
 
-    // remove mão de obra por hora
-    const docsPedidoLimpo = docsPedidoBruto.filter(d => !isMaoDeObraHoraNome(d.vidro));
+    const docsPedido = docsPedidoBruto.filter(d => !isMaoDeObraHoraNome(d.vidro));
 
-    // separa agregados x insumos
-    const docsInsumos = [];
-    const docsAgregados = [];
-    nomesProdutosVidro = new Set();
+    console.log('📊 docsPedido filtrados pelo numeroPedido (sem Mão de Obra):', docsPedido);
 
-    docsPedidoLimpo.forEach(d=>{
-      const nome = String(d.vidro || '').trim();
-      if(nome) nomesProdutosVidro.add(nome.toLowerCase());
-
-      const meta = d.meta || {};
-      const ehInsumo =
-        meta.eInsumo === true ||
-        meta.codigoOmie ||
-        meta.quantidadeOriginal != null ||
-        meta.quantidadeDesejada != null;
-
-      if(ehInsumo){
-        docsInsumos.push(d);
-      }else{
-        docsAgregados.push(d);
-      }
-    });
-
-    console.log('📊 docsInsumos (rota de vidros):', docsInsumos);
-    console.log('📊 docsAgregados (rota de vidros):', docsAgregados);
-    console.log('📊 nomesProdutosVidro:', Array.from(nomesProdutosVidro));
-
-    // ===== CABEÇALHO / TOTAIS PRIORITÁRIOS DA ROTA DE VIDROS =====
-    const docBase = docsPedidoLimpo[0];
-
-    if(docBase){
-      cabecalho.numeroPedido = String(docBase.numeroPedido || numeroPedidoStr || '');
-      cabecalho.cliente      = docBase.cliente   || cabecalho.cliente || '';
-      cabecalho.fornecedor   = docBase.fornecedor|| cabecalho.fornecedor || '';
-      cabecalho.vendedor     = docBase.vendedor  || docBase.responsavelVendedor || cabecalho.vendedor || '';
-
-      cabecalho.observacao   = docBase.observacao || cabecalho.observacao || '';
-      cabecalho.numeroNF     = docBase.numeroNotaFiscal || cabecalho.numeroNF || '';
-      cabecalho.formaPagamento = docBase.formaPagamento || cabecalho.formaPagamento || '';
-
-      if(docBase.meta){
-        cabecalho.telefoneFornecedor   = docBase.meta.telefoneFornecedor   || cabecalho.telefoneFornecedor || '';
-        cabecalho.emailFornecedor      = docBase.meta.emailFornecedor      || cabecalho.emailFornecedor || '';
-        cabecalho.codigoFornecedorOmie = docBase.meta.codigoFornecedorOmie || cabecalho.codigoFornecedorOmie || '';
-      }
-
-      totaisSistema.valorTotalPedido             = Number(docBase.valorTotalPedido||0);
-      totaisSistema.valorFaturamentoDiretoOrcado = Number(docBase.valorTotalFaturamentoDiretoOrcado||0);
-      totaisSistema.valorAproximadoUF            = Number(docBase.valorAproximadoUF||0);
-      totaisSistema.valorNFProdutos              = Number(docBase.valorTotalNFProdutos||0);
-      totaisSistema.valorNFServicos              = Number(docBase.valorTotalNFServicos||0);
-      totaisSistema.residuoDiferencaFaturamentoServico =
-        Number(docBase.residuoDiferencaFaturamentoServico||0);
-    }else{
-      cabecalho.numeroPedido = numeroPedidoStr;
-    }
-
-    // preenche cabeçalho na tela
-    $('#titulo').textContent       = cabecalho.numeroPedido ? `Pedido ${cabecalho.numeroPedido}` : 'Pedido';
-    $('#p-numero').value           = cabecalho.numeroPedido;
-    $('#p-cliente').value          = cabecalho.cliente;
-    $('#p-fornecedor').value       = cabecalho.fornecedor;
-    $('#p-vendedor').value         = cabecalho.vendedor;
-    $('#p-observacao-input').value = cabecalho.observacao;
-    $('#nf-numero').value          = cabecalho.numeroNF;
-    $('#forma-pag').value          = cabecalho.formaPagamento;
-    $('#p-forn-telefone').value    = cabecalho.telefoneFornecedor || '';
-    $('#p-forn-email').value       = cabecalho.emailFornecedor || '';
-    $('#p-forn-codigo').value      = cabecalho.codigoFornecedorOmie || '';
-
-    $('#t-valor-total-pedido').value = fmtBRL(totaisSistema.valorTotalPedido);
-    $('#t-valor-fatur-direto').value = fmtBRL(totaisSistema.valorFaturamentoDiretoOrcado);
-    $('#t-valor-uf').value           = fmtBRL(totaisSistema.valorAproximadoUF);
-    $('#t-nf-produtos').value        = fmtBRL(totaisSistema.valorNFProdutos);
-    $('#t-nf-servicos').value        = fmtBRL(totaisSistema.valorNFServicos);
-    $('#t-dif-fatur-serv').value     = fmtBRL(totaisSistema.residuoDiferencaFaturamentoServico);
-
-    // ===== REGRA PRINCIPAL =====
-    // 1) Se já existem INSUMOS em vidros → usa APENAS docsInsumos, ignora proposta.
-    if (docsInsumos.length > 0){
-      console.log('📌 Já existem insumos na rota de vidros. Usando SOMENTE o que veio do Mongo.');
-      itens = docsInsumos.map(doc => ({
-        ...doc,
-        grupoNome: (doc.meta && (doc.meta.grupoNome || doc.meta.grupo_nome)) || doc.grupoNome || 'Manual',
-        grupoTipo: (doc.meta && (doc.meta.grupoTipo || doc.meta.grupo_tipo)) || doc.grupoTipo || 'outro'
-      }));
-
-      atualizarPrevisaoCabecalho();
-      renderTabela();
-      recalcularTotaisLocais();
+    if (docsPedido.length > 0){
+      console.log('📌 Pedido já possui itens salvos no Mongo. NÃO vou recriar a partir da proposta.');
+      montarItensAPartirDoMongo(docsPedido);
       setStatus('ok');
+      hideLoader();
       return;
     }
 
-    console.log('🆕 Ainda não há insumos em vidros. Vou montar a partir da proposta.');
+    console.log('🆕 Pedido ainda NÃO tem itens salvos. Vou montar a partir da proposta.');
 
-    // 2) Ainda não há insumos em vidros → precisa da proposta
-    if (!rPropAll.ok){
+    if(!rPropAll.ok){
       console.warn('Falha ao carregar lista de propostas', rPropAll.status);
       itens = [];
       atualizarPrevisaoCabecalho();
       renderTabela();
       setStatus('ok');
       recalcularTotaisLocais();
+      hideLoader();
       return;
     }
 
     const rawProp = await rPropAll.json().catch(()=>({ raw:'não foi possível parsear JSON de propostas' }));
-    console.log('📥 Resposta propostas (raw):', rawProp);
+    console.log('📥 Resposta propostas (listaPropostas bruto):', rawProp);
 
     const listaPropostas = Array.isArray(rawProp)
       ? rawProp
@@ -1150,7 +1169,7 @@ async function carregar(){
 
     console.log('📊 listaPropostas normalizada:', listaPropostas);
 
-    const proposta = listaPropostas.find(p => {
+    const proposta = listaPropostas.find(p=>{
       const n1 = p.numeroProposta;
       const n2 = p.camposFormulario && p.camposFormulario.numeroOrcamento;
       return String(n1||'') === numeroPedidoStr || String(n2||'') === numeroPedidoStr;
@@ -1158,13 +1177,14 @@ async function carregar(){
 
     console.log('🔎 Proposta selecionada para o pedido:', proposta);
 
-    if (!proposta){
+    if(!proposta){
       alert('Não encontrei proposta com este número. Vou deixar a tela vazia para edição manual.');
       itens = [];
       atualizarPrevisaoCabecalho();
       renderTabela();
       setStatus('ok');
       recalcularTotaisLocais();
+      hideLoader();
       return;
     }
 
@@ -1177,76 +1197,53 @@ async function carregar(){
     console.log('🧩 grupos da proposta:', grupos);
     console.log('📅 previsaoGlobal da proposta:', previsaoGlobal);
 
-    // completa cabeçalho com dados da proposta APENAS se estiver vazio (vidro tem prioridade)
-    if(!cabecalho.cliente)  cabecalho.cliente  = cf.nomeCliente || '';
-    if(!cabecalho.vendedor) cabecalho.vendedor = cf.vendedorResponsavel || '';
-
-    $('#p-cliente').value  = cabecalho.cliente;
-    $('#p-vendedor').value = cabecalho.vendedor;
-
+    nomesProdutosPedido = new Set();
     itens = [];
 
-    grupos.forEach((grupo)=>{
+    grupos.forEach(grupo=>{
       const itensGrupo = Array.isArray(grupo.itens) ? grupo.itens : [];
       if(!itensGrupo.length) return;
 
-      const produtoCab = itensGrupo.find(
-        ins => String(ins.descricao_utilizacao || '').trim() === 'Produto Acabado'
-      );
+      // linha que representa o Produto Acabado (apenas para título do grupo)
+      const produtoCab = itensGrupo.find(ins => {
+        const desc = String(ins.descricao_utilizacao || '').trim().toLowerCase();
+        return desc === 'produto acabado' || desc === 'produto-acabado' || desc === 'produto_acabado';
+      });
 
       let grupoTipo = 'outro';
-      const nomeGrupoLower = String(grupo.nome || '').trim().toLowerCase();
-      if(nomeGrupoLower === 'vidro'){
-        grupoTipo = 'vidro';
-      }else if(produtoCab){
-        grupoTipo = 'produto';
-      }
+      if (produtoCab) grupoTipo = 'produto';
+      else if (String(grupo.nome || '').trim().toLowerCase() === 'vidro') grupoTipo = 'vidro';
 
-      const grupoLabelBase =
-        (produtoCab && (produtoCab.nome_produto || produtoCab.nome || '')) ||
-        grupo.nome ||
-        '';
+      const grupoLabelBase = produtoCab
+        ? (produtoCab.nome_produto || grupo.nome || '')
+        : (grupo.nome || '');
 
-      // filtro: só mostra grupos cujo Produto Acabado exista em vidros (quando houver)
-      let deveIncluirGrupo = true;
-      if (nomesProdutosVidro.size > 0 && produtoCab){
-        const nomePA = String(produtoCab.nome_produto || produtoCab.nome || '').trim().toLowerCase();
-        if (!nomesProdutosVidro.has(nomePA)){
-          deveIncluirGrupo = false;
-        }
-      }
-      if(!deveIncluirGrupo) return;
+      // 🔥 Aqui garantimos que trazemos TODOS os insumos (menos Mão de Obra por hora e menos a linha de Produto Acabado)
+      const insumosDoGrupo = itensGrupo.filter(ins=>{
+        const nomeProduto = String(ins.nome_produto || '').trim();
+        const descUtil    = String(ins.descricao_utilizacao || '').trim();
+        if (!nomeProduto) return false;
+        if (isMaoDeObraHoraNome(nomeProduto)) return false;
+        const ehProdutoAcabadoLinha = /produto\s*acabado/i.test(descUtil);
+        return !ehProdutoAcabadoLinha;
+      });
 
-      itensGrupo.forEach(ins=>{
-        const nomeProduto = String(ins.nome_produto || ins.nome || '').trim();
+      // Se não tiver insumo nenhum, mostramos pelo menos o Produto Acabado (melhor do que ficar vazio)
+      const listaFinal = insumosDoGrupo.length ? insumosDoGrupo : (produtoCab ? [produtoCab] : []);
+
+      listaFinal.forEach(ins=>{
+        const nomeProduto = String(ins.nome_produto || '').trim();
         const descUtil    = String(ins.descricao_utilizacao || '').trim();
 
-        if(!nomeProduto) return;
-        if(isMaoDeObraHoraNome(nomeProduto)) return;
-        if(descUtil === 'Produto Acabado') return;
-
-        const valorInsumo = Number(
-          ins.custo ??
-          ins.valor ??
-          ins.preco ??
-          ins.preco_venda ??
-          0
-        );
-
-        const quantidadeInsumo =
-          ins.quantidade ??
-          ins.quantidade_desejada ??
-          0;
-
-        itens.push({
-          numeroPedido: cabecalho.numeroPedido || numeroPedidoStr,
-          cliente:      cabecalho.cliente || cf.nomeCliente || '',
-          fornecedor:   cabecalho.fornecedor || '',
-          vendedor:     cabecalho.vendedor || cf.vendedorResponsavel || '',
+        const itemPush = {
+          numeroPedido: numeroPedidoStr,
+          cliente:      cf.nomeCliente || '',
+          fornecedor:   '',
+          vendedor:     cf.vendedorResponsavel || '',
 
           vidro:        nomeProduto,
           tipo:         descUtil || 'Reto',
-          quantidade:   quantidadeInsumo,
+          quantidade:   ins.quantidade ?? 0,
 
           orcamentoEnviado: '',
           aprovacao:        '',
@@ -1256,36 +1253,49 @@ async function carregar(){
           previsao:         previsaoGlobal || '',
           numeroPedidoFornecedor: '',
           numeroOrcFornecedor:   '',
-          numeroNotaFiscal:      cabecalho.numeroNF || '',
-          formaPagamento:        cabecalho.formaPagamento || '',
+          numeroNotaFiscal:      '',
+          formaPagamento:        '',
           vidrosProntos: '',
           naEmpresa:     '',
           faturamento:   'Ferreira Ulhoa',
-          observacao:    cabecalho.observacao || '',
-          valorReal:     valorInsumo,
+          observacao:    '',
+          valorReal:     ins.custo || 0,
 
           grupoNome: grupoLabelBase,
           grupoTipo,
 
           meta: {
-            eInsumo:            true,
-            grupoNome:          grupoLabelBase,
+            grupoNome:           grupoLabelBase,
             grupoTipo,
-            codigoOmie:         ins.codigo_omie || '',
-            quantidadeOriginal: ins.quantidade,
-            quantidadeDesejada: ins.quantidade_desejada
+            codigoOmie:          ins.codigo_omie || '',
+            quantidadeOriginal:  ins.quantidade,
+            quantidadeDesejada:  ins.quantidade_desejada
           }
-        });
+        };
+
+        itens.push(itemPush);
       });
     });
 
-    console.log('📋 Itens montados a partir da proposta (primeiro carregamento, sem insumos em vidros):', itens);
+    console.log('📋 itens finais depois do carregar() (pedido novo a partir da proposta, com INSUMOS):', itens);
+
+    cabecalho.numeroPedido = numeroPedidoStr;
+    cabecalho.cliente      = cf.nomeCliente || '';
+    cabecalho.vendedor     = cf.vendedorResponsavel || '';
+
+    $('#titulo').textContent       = `Pedido ${numeroPedidoStr}`;
+    $('#p-numero').value           = cabecalho.numeroPedido;
+    $('#p-cliente').value          = cabecalho.cliente;
+    $('#p-vendedor').value         = cabecalho.vendedor;
+    $('#p-observacao-input').value = cabecalho.observacao;
+    $('#nf-numero').value          = cabecalho.numeroNF;
+    $('#forma-pag').value          = cabecalho.formaPagamento;
 
     recalcularTotaisLocais();
     atualizarPrevisaoCabecalho();
     renderTabela();
     setStatus('ok');
-
+    
   }catch(e){
     console.error('💥 Erro em carregar():', e);
     setStatus('erro');
@@ -1384,34 +1394,15 @@ function initPopupResiduo(){
       const payload = {
         numeroPedido: cabecalho.numeroPedido,
         cliente: nomeCliente,
-        valor_documento: valorNum,
-        valorResquicio: valorNum, // redundância útil pra debug
-        codigo_cliente_fornecedor: pessoa?.codigo_cliente_omie || '',
+        valorResquicio: valorNum,
+        codigo_cliente_omie: pessoa?.codigo_cliente_omie || '',
         observacao: `Resquício do pedido ${cabecalho.numeroPedido}`
       };
 
-      console.log('📤 Enviando resquício para rota de comissão:', payload);
+      console.log('📤 Payload resquício pronto para envio (front):', payload);
+      alert('Resquício preparado. Veja os detalhes no console para integrar com seu backend/Omie.');
 
-      try{
-        const url = `${BASE_URL}/api/omie/comissao`;
-        const resp = await fetch(url, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(payload)
-        });
-        const body = await resp.json().catch(()=>({ raw:'não foi possível parsear JSON' }));
-        console.log('📥 Resposta /api/omie/comissao:', { status: resp.status, body });
-
-        if(resp.ok){
-          alert('✅ Resquício enviado para a rota de comissão com sucesso.');
-          popup.style.display = 'none';
-        }else{
-          alert('⚠️ Não foi possível lançar o resquício. Veja o console para detalhes.');
-        }
-      }catch(e){
-        console.error('💥 Erro ao enviar resquício para comissão:', e);
-        alert('Erro de comunicação ao lançar resquício.');
-      }
+      popup.style.display = 'none';
     });
   }
 

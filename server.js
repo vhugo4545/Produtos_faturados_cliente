@@ -142,6 +142,28 @@ const PedidoVidroSchema = new mongoose.Schema(
       default: "",
     },
 
+    // 🔹 Produto acabado ao qual este insumo pertence
+    produtoAcabadoCodigo: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    produtoAcabadoDescricao: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    produtoAcabadoGrupoId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    produtoAcabadoAmbiente: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     vidro: { type: String, trim: true, default: "" },
     tipo: { type: String, trim: true, default: "" },
     quantidade: { type: Number, default: 0 },
@@ -267,12 +289,28 @@ function normalizeProdutoPayload(body = {}) {
   payload.vidro = cleanKey(payload.vidro || "");
   payload.tipo = cleanKey(payload.tipo || "");
   payload.responsavelVendedor = cleanKey(payload.responsavelVendedor || "");
-  payload.numeroPedidoFornecedor = cleanKey(payload.numeroPedidoFornecedor || "");
+  payload.numeroPedidoFornecedor = cleanKey(
+    payload.numeroPedidoFornecedor || ""
+  );
   payload.numeroOrcFornecedor = cleanKey(payload.numeroOrcFornecedor || "");
 
   // 🔹 grupo (pra agrupar na tela)
   payload.grupoNome = cleanKey(payload.grupoNome || "");
   payload.grupoTipo = cleanKey(payload.grupoTipo || "");
+
+  // 🔹 produto acabado (pai do insumo)
+  payload.produtoAcabadoCodigo = cleanKey(
+    payload.produtoAcabadoCodigo || ""
+  );
+  payload.produtoAcabadoDescricao = cleanKey(
+    payload.produtoAcabadoDescricao || ""
+  );
+  payload.produtoAcabadoGrupoId = cleanKey(
+    payload.produtoAcabadoGrupoId || ""
+  );
+  payload.produtoAcabadoAmbiente = cleanKey(
+    payload.produtoAcabadoAmbiente || ""
+  );
 
   payload.numeroNotaFiscal = cleanKey(payload.numeroNotaFiscal || "");
   payload.formaPagamento = cleanKey(payload.formaPagamento || "");
@@ -292,7 +330,8 @@ function normalizeProdutoPayload(body = {}) {
   if (payload.previsao) payload.previsao = parseDateFlexible(payload.previsao);
   if (payload.vidrosProntos)
     payload.vidrosProntos = parseDateFlexible(payload.vidrosProntos);
-  if (payload.naEmpresa) payload.naEmpresa = parseDateFlexible(payload.naEmpresa);
+  if (payload.naEmpresa)
+    payload.naEmpresa = parseDateFlexible(payload.naEmpresa);
 
   // meta é Mixed → deixamos como veio (pode ter totaisSelecaoOmie, telefone fornecedor, etc.)
   if (payload.meta && typeof payload.meta === "object") {
