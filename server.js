@@ -533,6 +533,138 @@ app.delete("/api/produtos/:id", async (req, res) => {
    🔹 Nova rota Omie - Comissão
    ======================= */
 const OMIE_URL = "https://app.omie.com.br/api/v1/financas/contapagar/";
+// Contas a receber (resquício)
+const OMIE_URL_RECEBER = "https://app.omie.com.br/api/v1/financas/contareceber/";
+
+/* =======================
+   🔹 Nova rota Omie - Resquício (Contas a Receber)
+   ======================= */
+
+app.post("/api/omie/resquicio", async (req, res) => {
+  try {
+    console.log("📥 [RESQUICIO] Requisição recebida em /api/omie/resquicio");
+    console.log("📨 [RESQUICIO] Body completo recebido:", req.body);
+
+    const {
+      valor_documento,
+      data_vencimento,
+      data_previsao,
+      codigo_cliente_fornecedor, // vem do front (obrigatório)
+      id_conta_corrente = "4243124", // padrão para contas a receber (ajuste se usar outro)
+      observacao, // opcional
+    } = req.body || {};
+
+    // Log de entrada (resumo)
+    console.log("🔎 [RESQUICIO] Body recebido (resumo):", {
+      valor_documento,
+      data_vencimento,
+      data_previsao,
+      codigo_cliente_fornecedor,
+      id_conta_corrente,
+      observacao_preview: observacao?.slice(0, 120) || null,
+    });
+
+    // ================== validações ==================
+    const erros = [];
+    if (valor_documento == null) erros.push("valor_documento");
+    if (!data_vencimento) erros.push("data_vencimento");
+    if (!data_previsao) erros.push("data_previsao");
+    if (!codigo_cliente_fornecedor) erros.push("codigo_cliente_fornecedor");
+
+    if (erros.length) {
+      console.warn(
+        "⚠️ [RESQUICIO] Requisição inválida, campos ausentes:",
+        erros
+      );
+      return res.status(400).json({
+        ok: false,
+        error: `Campos obrigatórios ausentes: ${erros.join(", ")}.`,
+      });
+    }
+
+    // Categoria fixa para resquício (contas a receber)
+    const codigo_categoria = "1.01.99";
+
+    console.log("✅ [RESQUICIO] Categoria fixa utilizada:", codigo_categoria);
+
+    // =============== payload Omie ===============
+    const payload = {
+      call: "IncluirContaReceber",
+      app_key: OMIE_APP_KEY,
+      app_secret: OMIE_APP_SECRET,
+      param: [
+        {
+          codigo_lancamento_integracao: String(Date.now()),
+          codigo_cliente_fornecedor, // do front
+          codigo_categoria,          // FIXO: 1.01.99
+          id_conta_corrente,
+          valor_documento: Number(valor_documento),
+          data_vencimento: toBRDate(data_vencimento),
+          data_previsao: toBRDate(data_previsao),
+          observacao: observacao ?? "Lançamento de resquício via API",
+        },
+      ],
+    };
+
+    console.log("📦 [RESQUICIO] Payload completo para Omie (contareceber):", payload);
+
+    const r = await fetch(OMIE_URL_RECEBER, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const rawText = await r.text();
+    console.log("📨 [RESQUICIO] Resposta bruta (texto) da Omie:", rawText);
+
+    let omie;
+    try {
+      omie = JSON.parse(rawText);
+    } catch (e) {
+      console.warn(
+        "⚠️ [RESQUICIO] Não foi possível parsear JSON da Omie, retornando texto bruto."
+      );
+      omie = { raw: rawText };
+    }
+
+    if (!r.ok) {
+      console.error("❌ [RESQUICIO] Erro na resposta da Omie:", {
+        status: r.status,
+        statusText: r.statusText,
+        resposta: omie,
+      });
+      return res.status(400).json({
+        ok: false,
+        error:
+          omie?.faultstring ||
+          omie?.descricaoStatus ||
+          "Falha ao lançar resquício na Omie.",
+        omie,
+      });
+    }
+
+    console.log("📤 [RESQUICIO] Conta a receber (resquício) enviada com sucesso para Omie:", {
+      status: r.status,
+      resposta: omie,
+      resumo: {
+        codStatus: omie?.codStatus,
+        descricaoStatus: omie?.descricaoStatus,
+        faultstring: omie?.faultstring,
+      },
+    });
+
+    res.json({ ok: true, omie });
+  } catch (err) {
+    console.error("💥 [RESQUICIO] Erro inesperado em POST /api/omie/resquicio:", {
+      message: err?.message,
+      stack: err?.stack,
+    });
+    res
+      .status(500)
+      .json({ ok: false, error: "Falha ao enviar resquício (conta a receber) para Omie." });
+  }
+});
+
 
 app.post("/api/omie/comissao", async (req, res) => {
   try {

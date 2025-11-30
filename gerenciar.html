@@ -74,6 +74,10 @@
     cursor:pointer;
     font-size:14px;
   }
+  .btn[disabled]{
+    opacity:0.6;
+    cursor:not-allowed;
+  }
   .btn-primary{
     background:var(--primary);
     color:#fff;
@@ -308,8 +312,13 @@
       <div class="dl" id="info-principal">
         <h4>Principal</h4>
         <div class="row">
-          <label for="p-numero">Nº Pedido</label>
+          <label for="p-numero">Nº Orçamento</label>
           <input id="p-numero" />
+        </div>
+        <!-- Nº Orçamento -->
+        <div class="row">
+          <label for="p-orcamento">Nº Pedido</label>
+          <input id="p-orcamento" />
         </div>
         <div class="row">
           <label for="p-cliente">Cliente</label>
@@ -473,6 +482,7 @@
     </p>
 
     <!-- Formulário de lançamento do resquício -->
+      <!-- Formulário de lançamento do resquício -->
     <div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--border);">
       <div class="row" style="grid-template-columns:140px 1fr;margin:4px 0;">
         <label for="residuo-cliente-nome">Cliente</label>
@@ -493,7 +503,42 @@
           placeholder="R$ 0,00"
         />
       </div>
+
+      <div class="row" style="grid-template-columns:140px 1fr;margin:4px 0%;">
+        <label for="residuo-data-vencimento">Data vencimento</label>
+        <input
+          id="residuo-data-vencimento"
+          type="date"
+        />
+      </div>
+
+      <div class="row" style="grid-template-columns:140px 1fr;margin:4px 0%;">
+        <label for="residuo-data-previsao">Data previsão</label>
+        <input
+          id="residuo-data-previsao"
+          type="date"
+        />
+      </div>
+
+      <div class="row" style="grid-template-columns:140px 1fr;margin:4px 0%;">
+        <label for="residuo-tipo-comissao">Tipo de comissão</label>
+        <select id="residuo-tipo-comissao">
+          <option value="vendedor" selected>Vendedor / Consultor</option>
+          <option value="arquiteto">Arquiteto</option>
+          <option value="outro">Outro</option>
+        </select>
+      </div>
+
+      <div class="row" style="grid-template-columns:140px 1fr;margin:4px 0%;">
+        <label for="residuo-observacao">Observação</label>
+        <textarea
+          id="residuo-observacao"
+          style="width:100%;min-height:60px;resize:vertical;"
+          placeholder="Observação do lançamento na Omie…"
+        ></textarea>
+      </div>
     </div>
+
 
     <!-- Botões -->
     <div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px;">
@@ -512,14 +557,22 @@ const PROPOSTAS_URL  = 'https://ulhoa-0a02024d350a.herokuapp.com/api/propostas';
 const $ = (s,root=document)=>root.querySelector(s);
 const setStatus = t => { const el=$('#status'); if(el) el.textContent='status: '+t; };
 
-/* Loader global */
-function showLoader(){
+const btnSalvar = document.getElementById('btn-salvar');
+
+/* Loader global (agora com mensagem) */
+function showLoader(message){
   const el = document.getElementById('global-loader');
-  if(el) el.classList.add('active');
+  if(!el) return;
+  const span = el.querySelector('span');
+  if(span && message) span.textContent = message;
+  el.classList.add('active');
 }
 function hideLoader(){
   const el = document.getElementById('global-loader');
-  if(el) el.classList.remove('active');
+  if(!el) return;
+  const span = el.querySelector('span');
+  if(span) span.textContent = 'Carregando insumos e dados do pedido…';
+  el.classList.remove('active');
 }
 
 const fmtBRL = n => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0));
@@ -550,6 +603,7 @@ let nomesProdutosPedido = new Set();
 
 let cabecalho = {
   numeroPedido: '',
+  numeroOrcamento: '',
   cliente: '',
   fornecedor: '',
   vendedor: '',
@@ -623,6 +677,9 @@ function montarItensAPartirDoMongo(docsPedido){
     const itemMontado = {
       _id: doc._id,
       numeroPedido: String(doc.numeroPedido || ''),
+      // 👇 se já existir no banco, mantém; se não existir, vamos preencher no salvar()
+      numeroOrcamento: doc.numeroOrcamento || '',
+
       cliente: doc.cliente || '',
 
       fornecedor: doc.fornecedor || '',
@@ -648,6 +705,8 @@ function montarItensAPartirDoMongo(docsPedido){
       vidrosProntos: doc.vidrosProntos || '',
       naEmpresa: doc.naEmpresa || '',
       faturamento: doc.faturamento || 'Ferreira Ulhoa',
+
+      // 👇 observação POR ITEM
       observacao: doc.observacao || '',
 
       valorReal: Number(doc.valorReal || meta?.insumo?.valorTotalNumero || 0),
@@ -662,12 +721,19 @@ function montarItensAPartirDoMongo(docsPedido){
   const first     = lista[0] || {};
   const firstMeta = first.meta || {};
 
-  cabecalho.numeroPedido = String(first.numeroPedido || getPedidoParam() || '');
-  cabecalho.cliente      = first.cliente   || '';
-  cabecalho.fornecedor   = first.fornecedor|| '';
-  cabecalho.vendedor     = first.vendedor  || first.responsavelVendedor || '';
+  // 🔹 Observação GERAL vem só de meta.observacaoGeral (se existir)
+  const obsGeral = firstMeta && typeof firstMeta.observacaoGeral === 'string'
+    ? firstMeta.observacaoGeral
+    : '';
 
-  cabecalho.observacao     = first.observacao || '';
+  cabecalho.numeroPedido    = String(first.numeroPedido || getPedidoParam() || '');
+  cabecalho.numeroOrcamento = first.numeroOrcamento || cabecalho.numeroPedido;
+  cabecalho.cliente         = first.cliente   || '';
+  cabecalho.fornecedor      = first.fornecedor|| '';
+  cabecalho.vendedor        = first.vendedor  || first.responsavelVendedor || '';
+
+  // 👇 agora o cabeçalho NÃO usa mais first.observacao
+  cabecalho.observacao     = obsGeral || '';
   cabecalho.numeroNF       = first.numeroNotaFiscal || '';
   cabecalho.formaPagamento = first.formaPagamento || '';
 
@@ -682,6 +748,7 @@ function montarItensAPartirDoMongo(docsPedido){
     : 'Pedido';
 
   $('#p-numero').value           = cabecalho.numeroPedido;
+  $('#p-orcamento').value        = cabecalho.numeroOrcamento || '';
   $('#p-cliente').value          = cabecalho.cliente;
   $('#p-fornecedor').value       = cabecalho.fornecedor;
   $('#p-vendedor').value         = cabecalho.vendedor;
@@ -921,6 +988,7 @@ function atualizarPrevisaoCabecalho(){
 
 // Eventos do cabeçalho
 $('#p-numero').addEventListener('change', e=>{ cabecalho.numeroPedido = e.target.value.trim(); });
+$('#p-orcamento').addEventListener('change', e=>{ cabecalho.numeroOrcamento = e.target.value.trim(); });
 $('#p-fornecedor').addEventListener('change', e=>{ cabecalho.fornecedor = e.target.value.trim(); });
 $('#p-observacao-input').addEventListener('input', e=>{ cabecalho.observacao = e.target.value; });
 $('#nf-numero').addEventListener('input', e=>{ cabecalho.numeroNF = e.target.value; });
@@ -928,9 +996,11 @@ $('#forma-pag').addEventListener('change', e=>{ cabecalho.formaPagamento = e.tar
 
 // novo item manual
 document.getElementById('btn-add-item')?.addEventListener('click', ()=>{
-  const numeroPedido = cabecalho.numeroPedido || getPedidoParam();
+  const numeroPedido    = cabecalho.numeroPedido || getPedidoParam();
+  const numeroOrcamento = cabecalho.numeroOrcamento || numeroPedido;
   const novo = {
     numeroPedido,
+    numeroOrcamento,
     cliente: cabecalho.cliente,
     fornecedor: cabecalho.fornecedor,
     vendedor: cabecalho.vendedor,
@@ -962,7 +1032,8 @@ document.getElementById('btn-add-item')?.addEventListener('click', ()=>{
   atualizarPrevisaoCabecalho();
 });
 
-// salvar
+// salvar (agora com loader e operações paralelas)
+// salvar (com loader e operações paralelas, AGORA sem vincular fornecedor de item ao cabeçalho)
 async function salvarAlteracoes(){
   if(!Array.isArray(itens)){
     alert('Nenhum item para salvar.');
@@ -971,10 +1042,16 @@ async function salvarAlteracoes(){
   setStatus('salvando…');
   console.log('💾 Iniciando salvarAlteracoes, itens atuais:', itens);
 
-  try{
-    let okCount = 0;
+  if(btnSalvar){
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = 'Salvando…';
+  }
+  showLoader('Salvando alterações do pedido…');
 
+  try{
+    // Cabeçalho + totais
     cabecalho.numeroPedido        = ($('#p-numero')?.value || '').trim();
+    cabecalho.numeroOrcamento     = ($('#p-orcamento')?.value || '').trim();
     cabecalho.cliente             = ($('#p-cliente')?.value || '').trim();
     cabecalho.fornecedor          = ($('#p-fornecedor')?.value || '').trim();
     cabecalho.vendedor            = ($('#p-vendedor')?.value || '').trim();
@@ -993,52 +1070,52 @@ async function salvarAlteracoes(){
     totaisSistema.residuoDiferencaFaturamentoServico =
       moneyToNumber($('#t-dif-fatur-serv')?.value || 0);
 
+    // DELETE em paralelo
     console.log('🗑 Itens a deletar (ids):', Array.from(itensRemovidosIds));
-    for (const id of itensRemovidosIds){
+    const deleteIds = Array.from(itensRemovidosIds);
+    const deletePromises = deleteIds.map(async (id)=>{
       try{
         const urlDel = `${BASE_URL}/api/produtos/${id}`;
         console.log('🗑 [DELETE] Chamando:', urlDel);
         const respDel = await fetch(urlDel, { method:'DELETE' });
         const bodyDel = await respDel.text().catch(()=>null);
         console.log('🗑 [DELETE] Resposta:', { status: respDel.status, body: bodyDel });
+        return respDel.ok;
       }catch(e){
         console.error('❌ Erro ao deletar item', id, e);
+        return false;
       }
-    }
+    });
+    await Promise.all(deletePromises);
     itensRemovidosIds.clear();
 
-    for(const it of itens){
+    // PUT/POST em paralelo
+    const savePromises = itens.map(async (it)=>{
       const {_id, createdAt, updatedAt, __v, ...rest} = it;
       const clone = { ...rest };
 
-      clone.numeroPedido = cabecalho.numeroPedido || clone.numeroPedido || getPedidoParam();
-      clone.cliente      = cabecalho.cliente      || clone.cliente      || $('#p-cliente')?.value || '';
+      clone.numeroPedido    = cabecalho.numeroPedido    || clone.numeroPedido    || getPedidoParam();
+      clone.numeroOrcamento = cabecalho.numeroOrcamento || clone.numeroOrcamento || clone.numeroPedido;
 
-      // fornecedor: texto livre por item
-      if (!clone.fornecedor && cabecalho.fornecedor) {
-        clone.fornecedor = cabecalho.fornecedor;
-      } else {
-        clone.fornecedor = clone.fornecedor || '';
-      }
+      clone.cliente = cabecalho.cliente || clone.cliente || $('#p-cliente')?.value || '';
+
+      // Fornecedor do INSUMO (linha) continua independente
+      clone.fornecedor = clone.fornecedor || '';
 
       if (cabecalho.vendedor) {
         clone.responsavelVendedor = cabecalho.vendedor;
       } else {
         clone.responsavelVendedor = clone.responsavelVendedor || clone.vendedor || '';
       }
-
       delete clone.vendedor;
 
+      // NF/forma pag/obs de item: mantêm o que veio dos inputs da linha.
+      // 🔹 NÃO copiamos mais a observação geral para clone.observacao aqui.
       if (!clone.numeroNotaFiscal && cabecalho.numeroNF) {
         clone.numeroNotaFiscal = cabecalho.numeroNF;
       }
-
       if (!clone.formaPagamento && cabecalho.formaPagamento) {
         clone.formaPagamento = cabecalho.formaPagamento;
-      }
-
-      if (!clone.observacao && cabecalho.observacao) {
-        clone.observacao = cabecalho.observacao;
       }
 
       clone.valorTotalPedido                      = totaisSistema.valorTotalPedido;
@@ -1050,39 +1127,50 @@ async function salvarAlteracoes(){
 
       clone.meta = { ...(clone.meta || {}) };
 
+      // 🔹 Observação GERAL vai para meta.observacaoGeral
+      clone.meta.observacaoGeral = cabecalho.observacao || '';
+
       if (cabecalho.telefoneFornecedor)   clone.meta.telefoneFornecedor   = cabecalho.telefoneFornecedor;
       if (cabecalho.emailFornecedor)      clone.meta.emailFornecedor      = cabecalho.emailFornecedor;
       if (cabecalho.codigoFornecedorOmie) clone.meta.codigoFornecedorOmie = cabecalho.codigoFornecedorOmie;
 
-      if(_id){
-        const urlPut = `${BASE_URL}/api/produtos/${_id}`;
-        console.log('✏️ [PUT] Salvando item existente:', { url: urlPut, payload: clone });
-        const r = await fetch(urlPut, {
-          method:'PUT',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(clone)
-        });
-        const j = await r.json().catch(()=>({ raw: 'não foi possível parsear JSON' }));
-        console.log('📥 [PUT] Resposta:', { status: r.status, body: j });
-        if(j.ok) okCount++;
-      }else{
-        const urlPost = `${BASE_URL}/api/produtos`;
-        console.log('➕ [POST] Criando novo item:', { url: urlPost, payload: clone });
-        const r = await fetch(urlPost, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(clone)
-        });
-        const j = await r.json().catch(()=>({ raw: 'não foi possível parsear JSON' }));
-        console.log('📥 [POST] Resposta:', { status: r.status, body: j });
-        if(j.ok){
-          okCount++;
-          if(j.data && j.data._id){
-            it._id = j.data._id;
+      try{
+        if(_id){
+          const urlPut = `${BASE_URL}/api/produtos/${_id}`;
+          console.log('✏️ [PUT] Salvando item existente:', { url: urlPut, payload: clone });
+          const r = await fetch(urlPut, {
+            method:'PUT',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify(clone)
+          });
+          const j = await r.json().catch(()=>({ raw: 'não foi possível parsear JSON' }));
+          console.log('📥 [PUT] Resposta:', { status: r.status, body: j });
+          if(j.ok) return 1;
+        }else{
+          const urlPost = `${BASE_URL}/api/produtos`;
+          console.log('➕ [POST] Criando novo item:', { url: urlPost, payload: clone });
+          const r = await fetch(urlPost, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify(clone)
+          });
+          const j = await r.json().catch(()=>({ raw: 'não foi possível parsear JSON' }));
+          console.log('📥 [POST] Resposta:', { status: r.status, body: j });
+          if(j.ok){
+            if(j.data && j.data._id){
+              it._id = j.data._id;
+            }
+            return 1;
           }
         }
+      }catch(e){
+        console.error('❌ Erro ao salvar item:', e);
       }
-    }
+      return 0;
+    });
+
+    const results = await Promise.all(savePromises);
+    const okCount = results.reduce((acc,v)=>acc+v,0);
 
     alert(`✅ ${okCount} item(ns) salvo(s) com sucesso.`);
     console.log('✅ salvarAlteracoes concluído. Itens salvos com sucesso:', okCount);
@@ -1094,6 +1182,12 @@ async function salvarAlteracoes(){
     console.error('💥 Erro em salvarAlteracoes:', err);
     setStatus('erro');
     alert('Erro ao salvar alterações: ' + err.message);
+  }finally{
+    if(btnSalvar){
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = 'Salvar alterações';
+    }
+    hideLoader();
   }
 }
 
@@ -1143,7 +1237,7 @@ async function carregar(){
   const numeroPedidoStr = String(numeroPedido);
 
   setStatus('carregando…');
-  showLoader();
+  showLoader('Carregando itens do pedido…');
   console.log('🔄 carregar() iniciado para pedido:', numeroPedidoStr);
 
   const urlItens = new URL(`${BASE_URL}/api/produtos`);
@@ -1220,18 +1314,23 @@ function initTotaisInputs(){
 }
 
 // Popup Resquício
+// Popup Resquício – agora envia direto para /api/omie/comissao
 function initPopupResiduo(){
   const popup = document.getElementById('popup-residuo');
   const btn   = document.getElementById('btn-residuo');
   if(!popup || !btn) return;
 
-  const formulaEl   = document.getElementById('residuo-formula');
-  const sugEl       = document.getElementById('residuo-sugestao');
-  const inputValor  = document.getElementById('residuo-valor-input');
-  const btnEnviar   = document.getElementById('btn-enviar-residuo');
-  const inputCliente = document.getElementById('residuo-cliente-nome');
+  const formulaEl        = document.getElementById('residuo-formula');
+  const sugEl            = document.getElementById('residuo-sugestao');
+  const inputValor       = document.getElementById('residuo-valor-input');
+  const btnEnviar        = document.getElementById('btn-enviar-residuo');
+  const inputCliente     = document.getElementById('residuo-cliente-nome');
+  const inputVencimento  = document.getElementById('residuo-data-vencimento');
+  const inputPrevisao    = document.getElementById('residuo-data-previsao');
+  const inputObs         = document.getElementById('resquicio-observacao');
 
-  btn.addEventListener('click', ()=>{
+  // Abrir popup preenchendo sugestão
+  btn.addEventListener('click', ()=> {
     const totalReal = itens.reduce((acc,i)=> acc + Number(i.valorReal||0), 0);
     const fatDir    = totaisSistema.valorFaturamentoDiretoOrcado || 0;
     const nfServ    = totaisSistema.valorNFServicos || 0;
@@ -1247,23 +1346,48 @@ function initPopupResiduo(){
       inputValor.value = fmtBRL(residCalc);
     }
 
+    // Sugere cliente = cliente do cabeçalho
+    if (inputCliente){
+      inputCliente.value = cabecalho.cliente || '';
+    }
+
+    // Datas sugeridas = hoje
+    const hojeISO = new Date().toISOString().slice(0,10);
+    if (inputVencimento && !inputVencimento.value){
+      inputVencimento.value = hojeISO;
+    }
+    if (inputPrevisao && !inputPrevisao.value){
+      inputPrevisao.value = hojeISO;
+    }
+
+    // Observação padrão
+    if (inputObs && !inputObs.value){
+      inputObs.value = `Resquício do pedido ${cabecalho.numeroPedido || ''}`.trim();
+    }
+
     popup.style.display = 'flex';
   });
 
+  // Formatação do valor
   if(inputValor){
-    inputValor.addEventListener('blur', (e)=>{
+    inputValor.addEventListener('blur', (e)=> {
       const num = moneyToNumber(e.target.value);
       e.target.value = fmtBRL(num);
     });
-    inputValor.addEventListener('focus', (e)=>{
+    inputValor.addEventListener('focus', (e)=> {
       setTimeout(()=> e.target.select(), 10);
     });
   }
 
+  // Enviar resquício para /api/omie/resquicio (contas a receber)
   if(btnEnviar){
-    btnEnviar.addEventListener('click', async ()=>{
+    btnEnviar.addEventListener('click', async ()=> {
       const nomeCliente = (inputCliente?.value || '').trim();
       const valorNum    = moneyToNumber(inputValor?.value || '0');
+      const dataVenc    = (inputVencimento?.value || '').trim();
+      let   dataPrev    = (inputPrevisao?.value || '').trim();
+      const obsTxt      = (inputObs?.value || '').trim() ||
+        `Resquício do pedido ${cabecalho.numeroPedido || ''}`;
 
       if(!nomeCliente){
         alert('Informe o cliente para lançar o resquício.');
@@ -1273,27 +1397,70 @@ function initPopupResiduo(){
         alert('Informe um valor válido para o resquício.');
         return;
       }
+      if(!dataVenc){
+        alert('Informe a data de vencimento do resquício.');
+        return;
+      }
+      if(!dataPrev){
+        // se não preencher previsão, usamos o mesmo da data de vencimento
+        dataPrev = dataVenc;
+      }
 
       const pessoa = (typeof mapaFornecedoresPorNome !== 'undefined')
         ? mapaFornecedoresPorNome.get(nomeCliente)
         : null;
 
-      const payload = {
-        numeroPedido: cabecalho.numeroPedido,
-        cliente: nomeCliente,
-        valorResquicio: valorNum,
-        codigo_cliente_omie: pessoa?.codigo_cliente_omie || '',
-        observacao: `Resquício do pedido ${cabecalho.numeroPedido}`
+      if(!pessoa || !pessoa.codigo_cliente_omie){
+        alert('Não foi possível encontrar o código Omie desse cliente. Verifique o cadastro.');
+        return;
+      }
+
+      const body = {
+        valor_documento: valorNum,
+        data_vencimento: dataVenc,
+        data_previsao:   dataPrev,
+        codigo_cliente_fornecedor: pessoa.codigo_cliente_omie, // 👈 vem de codigo_cliente_omie
+        observacao: obsTxt
       };
 
-      console.log('📤 Payload resquício pronto para envio (front):', payload);
-      alert('Resquício preparado. Veja os detalhes no console para integrar com seu backend/Omie.');
+      console.log('📤 Enviando resquício para /api/omie/resquicio:', body);
 
-      popup.style.display = 'none';
+      btnEnviar.disabled = true;
+      btnEnviar.textContent = 'Enviando…';
+      showLoader();
+
+      try{
+        const resp = await fetch(`${BASE_URL}/api/omie/resquicio`, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        const json = await resp.json().catch(()=>({ ok:false, error:'Erro ao parsear resposta.' }));
+        console.log('📥 Resposta /api/omie/resquicio:', { status: resp.status, body: json });
+
+        if(!resp.ok || json.ok === false){
+          const msg = json.error || json.omie?.faultstring || 'Falha ao lançar resquício na Omie.';
+          alert('❌ Erro ao enviar resquício para Omie: ' + msg);
+          return;
+        }
+
+        alert('✅ Resquício lançado na Omie com sucesso!');
+        popup.style.display = 'none';
+
+      }catch(err){
+        console.error('💥 Erro ao enviar resquício para Omie:', err);
+        alert('Erro inesperado ao enviar resquício: ' + err.message);
+      }finally{
+        btnEnviar.disabled = false;
+        btnEnviar.textContent = 'Enviar';
+        hideLoader();
+      }
     });
   }
 
-  popup.addEventListener('click', e=>{
+  // Fechar popup
+  popup.addEventListener('click', e=> {
     if(e.target === popup || e.target.closest('[data-close-residuo]')){
       popup.style.display = 'none';
     }
