@@ -120,6 +120,11 @@ function computeDerived(doc) {
 const PedidoVidroSchema = new mongoose.Schema(
   {
     numeroPedido: { type: String, trim: true, default: "" },
+
+    // 🔹 NOVO CAMPO – número de orçamento
+    // se não vier do front, é preenchido a partir de numeroPedido na normalização
+    numeroOrcamento: { type: String, trim: true, default: "" },
+
     cliente: { type: String, trim: true, default: "" },
 
     // 🔹 sempre presente em cada linha
@@ -223,6 +228,7 @@ PedidoVidroSchema.pre("save", function (next) {
   console.log("🟡 [MONGO] pre-save chamado para documento:", {
     _id: this._id,
     numeroPedido: this.numeroPedido,
+    numeroOrcamento: this.numeroOrcamento,
     cliente: this.cliente,
     vidro: this.vidro,
   });
@@ -273,6 +279,8 @@ const PedidoVidro = mongoose.model("PedidoVidro", PedidoVidroSchema);
 
 /**
  * Garante que todo produto tenha:
+ * - numeroOrcamento sempre preenchido
+ *   (se não vier, copia de numeroPedido)
  * - fornecedor / grupoNome / grupoTipo
  * - numeroNotaFiscal / formaPagamento / observacao
  * + normaliza strings / números / datas
@@ -283,7 +291,15 @@ function normalizeProdutoPayload(body = {}) {
 
   const payload = { ...body };
 
+  // numeroPedido primeiro
   payload.numeroPedido = cleanKey(payload.numeroPedido || "");
+
+  // numeroOrcamento:
+  // se vier do front usa, se vier vazio/null usa numeroPedido.
+  payload.numeroOrcamento = cleanKey(
+    payload.numeroOrcamento || payload.numeroPedido || ""
+  );
+
   payload.cliente = cleanKey(payload.cliente || "");
   payload.fornecedor = cleanKey(payload.fornecedor || "");
   payload.vidro = cleanKey(payload.vidro || "");
@@ -382,6 +398,7 @@ app.post("/api/produtos", async (req, res) => {
     console.log("✅ [POST /api/produtos] Produto criado:", {
       _id: created._id,
       numeroPedido: created.numeroPedido,
+      numeroOrcamento: created.numeroOrcamento,
       cliente: created.cliente,
       vidro: created.vidro,
       grupoNome: created.grupoNome,
@@ -406,6 +423,9 @@ app.get("/api/produtos", async (req, res) => {
     const filter = {};
     if (req.query.numeroPedido) {
       filter.numeroPedido = String(req.query.numeroPedido);
+    }
+    if (req.query.numeroOrcamento) {
+      filter.numeroOrcamento = String(req.query.numeroOrcamento);
     }
 
     console.log("🔍 [GET /api/produtos] Filtro Mongo:", filter);
@@ -454,6 +474,7 @@ app.put("/api/produtos/:id", async (req, res) => {
     console.log("✅ [PUT /api/produtos/:id] Produto atualizado:", {
       _id: updated._id,
       numeroPedido: updated.numeroPedido,
+      numeroOrcamento: updated.numeroOrcamento,
       cliente: updated.cliente,
       vidro: updated.vidro,
       grupoNome: updated.grupoNome,
@@ -489,6 +510,7 @@ app.delete("/api/produtos/:id", async (req, res) => {
     console.log("✅ [DELETE /api/produtos/:id] Produto removido:", {
       _id: removed._id,
       numeroPedido: removed.numeroPedido,
+      numeroOrcamento: removed.numeroOrcamento,
       cliente: removed.cliente,
       vidro: removed.vidro,
       grupoNome: removed.grupoNome,
