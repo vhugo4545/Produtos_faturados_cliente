@@ -531,6 +531,8 @@ app.delete("/api/produtos/:id", async (req, res) => {
 
 /* =======================
    🔹 Nova rota Omie - Comissão
+   ======================= *//* =======================
+   URLs Omie
    ======================= */
 const OMIE_URL = "https://app.omie.com.br/api/v1/financas/contapagar/";
 // Contas a receber (resquício)
@@ -596,7 +598,7 @@ app.post("/api/omie/resquicio", async (req, res) => {
         {
           codigo_lancamento_integracao: String(Date.now()),
           codigo_cliente_fornecedor, // do front
-          codigo_categoria,          // FIXO: 1.01.99
+          codigo_categoria, // FIXO: 1.01.99
           id_conta_corrente,
           valor_documento: Number(valor_documento),
           data_vencimento: toBRDate(data_vencimento),
@@ -606,7 +608,10 @@ app.post("/api/omie/resquicio", async (req, res) => {
       ],
     };
 
-    console.log("📦 [RESQUICIO] Payload completo para Omie (contareceber):", payload);
+    console.log(
+      "📦 [RESQUICIO] Payload completo para Omie (contareceber):",
+      payload
+    );
 
     const r = await fetch(OMIE_URL_RECEBER, {
       method: "POST",
@@ -643,15 +648,18 @@ app.post("/api/omie/resquicio", async (req, res) => {
       });
     }
 
-    console.log("📤 [RESQUICIO] Conta a receber (resquício) enviada com sucesso para Omie:", {
-      status: r.status,
-      resposta: omie,
-      resumo: {
-        codStatus: omie?.codStatus,
-        descricaoStatus: omie?.descricaoStatus,
-        faultstring: omie?.faultstring,
-      },
-    });
+    console.log(
+      "📤 [RESQUICIO] Conta a receber (resquício) enviada com sucesso para Omie:",
+      {
+        status: r.status,
+        resposta: omie,
+        resumo: {
+          codStatus: omie?.codStatus,
+          descricaoStatus: omie?.descricaoStatus,
+          faultstring: omie?.faultstring,
+        },
+      }
+    );
 
     res.json({ ok: true, omie });
   } catch (err) {
@@ -659,12 +667,16 @@ app.post("/api/omie/resquicio", async (req, res) => {
       message: err?.message,
       stack: err?.stack,
     });
-    res
-      .status(500)
-      .json({ ok: false, error: "Falha ao enviar resquício (conta a receber) para Omie." });
+    res.status(500).json({
+      ok: false,
+      error: "Falha ao enviar resquício (conta a receber) para Omie.",
+    });
   }
 });
 
+/* =======================
+   🔹 Rota Omie - Comissão (Contas a Pagar)
+   ======================= */
 
 app.post("/api/omie/comissao", async (req, res) => {
   try {
@@ -723,13 +735,10 @@ app.post("/api/omie/comissao", async (req, res) => {
       const hint = String(tipo || papel || tipo_comissao || "").toLowerCase();
       const obs = String(observacao || "").toLowerCase();
 
-      console.log(
-        "🧩 [COMISSAO] Inferindo categoria com base em hint/obs:",
-        {
-          hint,
-          obs_preview: obs.slice(0, 120),
-        }
-      );
+      console.log("🧩 [COMISSAO] Inferindo categoria com base em hint/obs:", {
+        hint,
+        obs_preview: obs.slice(0, 120),
+      });
 
       if (hint.includes("arquit") || obs.includes("arquit")) {
         codigo_categoria = "2.08.02"; // arquiteto
@@ -827,6 +836,13 @@ app.listen(PORT, () => {
     `🔐 OMIE_APP_KEY: ${
       OMIE_APP_KEY ? "(definida)" : "(vazia)"
     } | OMIE_APP_SECRET: ${OMIE_APP_SECRET ? "(definida)" : "(vazia)"}`
+  );
+  console.log(
+    `🔐 OMIE_APP_KEY_SERVICOS: ${
+      OMIE_APP_KEY_SERVICOS ? "(definida)" : "(vazia)"
+    } | OMIE_APP_SECRET_SERVICOS: ${
+      OMIE_APP_SECRET_SERVICOS ? "(definida)" : "(vazia)"
+    }`
   );
   console.log(`🔑 JWT_SECRET: ${JWT_SECRET ? "(definido)" : "(vazio)"}`);
   console.log(`🔑 JWT_REFRESH: ${JWT_REFRESH ? "(definido)" : "(vazio)"}`);
