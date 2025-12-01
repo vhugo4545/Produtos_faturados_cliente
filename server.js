@@ -553,7 +553,7 @@ app.post("/api/omie/resquicio", async (req, res) => {
       data_vencimento,
       data_previsao,
       codigo_cliente_fornecedor, // vem do front (obrigatório)
-      id_conta_corrente = "4243124", // padrão para contas a receber (ajuste se usar outro)
+      id_conta_corrente = "10919038297", // padrão para contas a receber (ajuste se usar outro)
       observacao, // opcional
     } = req.body || {};
 

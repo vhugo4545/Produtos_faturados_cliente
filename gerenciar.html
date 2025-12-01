@@ -1477,7 +1477,7 @@ initPopupResiduo();
 // =========================
 //  BUSCA CLIENTES/FORNECEDORES VIA ENDPOINT
 // =========================
-const PESSOAS_URL = 'https://ulhoa-0a02024d350a.herokuapp.com/clientes/visualizar';
+const PESSOAS_URL = 'https://ulhoa-servico-ec4e1aa95355.herokuapp.com/clientes';
 
 let cachePessoas = [];
 let mapaFornecedoresPorNome = new Map();
@@ -1495,15 +1495,24 @@ async function carregarPessoas(){
     const data = await r.json().catch(()=>({ raw: 'não foi possível parsear JSON de pessoas' }));
     console.log('📥 Resposta pessoas (bruto):', data);
 
-    if(!Array.isArray(data)) {
-      console.warn('⚠️ Resposta de pessoas não é array.');
+    // ✅ Ajuste: aceita array direto OU objeto { clientes: [...] }
+    let lista = null;
+
+    if (Array.isArray(data)) {
+      lista = data;
+    } else if (data && Array.isArray(data.clientes)) {
+      lista = data.clientes;
+    }
+
+    if (!Array.isArray(lista)) {
+      console.warn('⚠️ Resposta de pessoas não é array nem objeto com .clientes.');
       return;
     }
 
-    cachePessoas = data;
+    cachePessoas = lista;
     mapaFornecedoresPorNome.clear();
 
-    data.forEach(p=>{
+    lista.forEach(p=>{
       const nome = p.nome_fantasia || p.razao_social || '';
       if(!nome) return;
       mapaFornecedoresPorNome.set(nome, p);
@@ -1620,6 +1629,41 @@ carregarPessoas();
     }, 200);
   });
 })();
+
+const OS_BASE_URL = "https://ulhoa-servico-ec4e1aa95355.herokuapp.com";
+
+async function atualizarClientesOmieAgora() {
+  try {
+    const resp = await fetch(`${OS_BASE_URL}/clientes/atualizar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const data = await resp.json().catch(() => null);
+
+    console.log("📥 Resposta /clientes/atualizar:", {
+      status: resp.status,
+      body: data,
+    });
+
+    if (!resp.ok) {
+      const msg =
+        data?.error ||
+        data?.detail ||
+        `Falha ao atualizar clientes. Status: ${resp.status}`;
+      throw new Error(msg);
+    }
+
+    // 🔄 Recarrega cache local após atualizar Omie
+    await carregarPessoas();
+
+    return data;
+  } catch (err) {
+    console.error("💥 Erro ao chamar /clientes/atualizar:", err);
+    alert("Erro ao atualizar lista de clientes: " + err.message);
+    throw err;
+  }
+}
 </script>
 
 </body>
