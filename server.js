@@ -123,8 +123,7 @@ const PedidoVidroSchema = new mongoose.Schema(
   {
     numeroPedido: { type: String, trim: true, default: "" },
 
-    // 🔹 NOVO CAMPO – número de orçamento
-    // se não vier do front, é preenchido a partir de numeroPedido na normalização
+    // 🔹 Campo independente – número de orçamento (não copia mais de numeroPedido)
     numeroOrcamento: { type: String, trim: true, default: "" },
 
     cliente: { type: String, trim: true, default: "" },
@@ -281,8 +280,8 @@ const PedidoVidro = mongoose.model("PedidoVidro", PedidoVidroSchema);
 
 /**
  * Garante que todo produto tenha:
- * - numeroOrcamento sempre preenchido
- *   (se não vier, copia de numeroPedido)
+ * - numeroPedido normalizado
+ * - numeroOrcamento normalizado (independente de numeroPedido)
  * - fornecedor / grupoNome / grupoTipo
  * - numeroNotaFiscal / formaPagamento / observacao
  * + normaliza strings / números / datas
@@ -293,14 +292,11 @@ function normalizeProdutoPayload(body = {}) {
 
   const payload = { ...body };
 
-  // numeroPedido primeiro
+  // numeroPedido: independente
   payload.numeroPedido = cleanKey(payload.numeroPedido || "");
 
-  // numeroOrcamento:
-  // se vier do front usa, se vier vazio/null usa numeroPedido.
-  payload.numeroOrcamento = cleanKey(
-    payload.numeroOrcamento || payload.numeroPedido || ""
-  );
+  // numeroOrcamento: totalmente independente de numeroPedido
+  payload.numeroOrcamento = cleanKey(payload.numeroOrcamento || "");
 
   payload.cliente = cleanKey(payload.cliente || "");
   payload.fornecedor = cleanKey(payload.fornecedor || "");
