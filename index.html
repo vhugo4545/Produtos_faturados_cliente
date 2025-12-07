@@ -4,6 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Pedidos (visão agrupada)</title>
+
+<!-- 🔴 Desativar cache no navegador -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
@@ -288,7 +294,6 @@
     border-bottom:none;
   }
 
-  /* destaque do selecionado */
   tbody td:first-child{
     border-left:2px solid transparent;
   }
@@ -343,6 +348,7 @@
     display:flex;
     justify-content:center;
     gap:6px;
+    flex-wrap:wrap;
   }
 
   .empty-state{
@@ -352,7 +358,6 @@
     text-align:center;
   }
 
-  /* painel de detalhes à direita */
   .details-title{
     font-size:15px;
     font-weight:600;
@@ -557,7 +562,7 @@
                 <th>Fornecedor</th>
                 <th class="center" style="width:110px;">Itens</th>
                 <th class="right" style="width:150px;">Total</th>
-                <th class="center" style="width:180px;">Ações</th>
+                <th class="center" style="width:220px;">Ações</th>
               </tr>
             </thead>
             <tbody><!-- linhas --></tbody>
@@ -594,7 +599,7 @@ const setStatus = t => {
   if (el) el.textContent = 'status: ' + t;
   if (!dot) return;
   dot.classList.remove('loading','error');
-  if (/carregando|processando/i.test(t)) dot.classList.add('loading');
+  if (/carregando|processando|excluindo|limpando/i.test(t)) dot.classList.add('loading');
   else if (/erro/i.test(t)) dot.classList.add('error');
 };
 
@@ -604,7 +609,7 @@ function normalizarTexto(str){
   return String(str || '')
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g,'') // remove acentos
+    .replace(/[\u0300-\u036f]/g,'')
     .replace(/\s+/g,' ')
     .trim();
 }
@@ -619,9 +624,6 @@ function extrairDigitos(str){
 
 /**
  * 🔍 Filtra os documentos pelo que foi digitado na busca.
- * - Procura em: numeroPedido, numeroOrcamento, cliente, fornecedor
- * - Para números, ignora espaços, barras, pontos etc
- *   Ex.: "228 / 25" ⇄ "228/25" ⇄ "22825"
  */
 function filtrarDocs(docs, q){
   if (!q) return docs;
@@ -636,7 +638,6 @@ function filtrarDocs(docs, q){
     const cliente        = d.cliente        || '';
     const fornecedor     = d.fornecedor     || '';
 
-    // Campos de texto (cliente / fornecedor)
     const camposTexto = [
       normalizarTexto(cliente),
       normalizarTexto(fornecedor)
@@ -646,23 +647,15 @@ function filtrarDocs(docs, q){
       ? camposTexto.some(v => v && v.includes(qTexto))
       : false;
 
-    // Campos numéricos (pedido / orçamento)
     const nums = [numeroPedido, numeroOrcamento];
 
     const matchNum = nums.some(num => {
       if (!num) return false;
       const numTextoCompacto = compactarTexto(num);
       const numDigitos = extrairDigitos(num);
-
       let ok = false;
-
-      if (qTextoCompacto && numTextoCompacto.includes(qTextoCompacto)){
-        ok = true;
-      }
-      if (qDigitos && numDigitos.includes(qDigitos)){
-        ok = true;
-      }
-
+      if (qTextoCompacto && numTextoCompacto.includes(qTextoCompacto)) ok = true;
+      if (qDigitos && numDigitos.includes(qDigitos)) ok = true;
       return ok;
     });
 
@@ -674,10 +667,10 @@ async function listar(q=''){
   setStatus('carregando…');
   const url = new URL(BASE_URL + '/api/produtos');
   url.searchParams.set('limit','2000');
-  // ❌ não mandamos mais "q" pro back, filtramos no front
+  url.searchParams.set('_', Date.now().toString()); // cache-buster
 
   try{
-    const r = await fetch(url);
+    const r = await fetch(url, { cache: 'no-store' });
     const j = await r.json();
     if(!j.ok){
       setStatus('erro ao listar');
@@ -693,7 +686,6 @@ async function listar(q=''){
 
     const qtdPedidos = Object.keys(groups).length;
     const qtdDocs = filtrados.length;
-
     setStatus(`ok — ${qtdPedidos} pedido(s) / ${qtdDocs} item(ns)`);
   }catch(err){
     console.error(err);
@@ -702,36 +694,41 @@ async function listar(q=''){
   }
 }
 
+/**
+ * 🔗 Agrupa por numeroPedido e sempre usa as infos mais recentes
+ */
 function agruparPorPedido(docs){
   const map = new Map();
 
   for (const d of docs){
-    // 🔹 chave de agrupamento: sempre numeroPedido
     const numeroPedido = String(d.numeroPedido || d.numero_pedido || '').trim();
     if (!numeroPedido) continue;
 
     const numeroOrcamento = String(d.numeroOrcamento || d.numero_orcamento || '').trim();
+    const cliente    = d.cliente    || '-';
+    const fornecedor = d.fornecedor || '-';
+    const valor      = Number(d.valorReal || d.valor || 0);
 
-    if (!map.has(numeroPedido)){
-      map.set(numeroPedido, {
+    let g = map.get(numeroPedido);
+    if (!g){
+      g = {
         numeroPedido,
         numeroOrcamento: numeroOrcamento || '',
-        cliente: d.cliente || '-',
-        fornecedor: d.fornecedor || '-',
+        cliente,
+        fornecedor,
         itens: [],
         total: 0
-      });
+      };
+      map.set(numeroPedido, g);
+    } else {
+      // 🔄 Atualiza com dados mais recentes
+      if (numeroOrcamento) g.numeroOrcamento = numeroOrcamento;
+      if (cliente && cliente !== '-') g.cliente = cliente;
+      if (fornecedor && fornecedor !== '-') g.fornecedor = fornecedor;
     }
 
-    const g = map.get(numeroPedido);
-
-    // se ainda não tiver numeroOrcamento no grupo e este item tiver, preenche
-    if (!g.numeroOrcamento && numeroOrcamento){
-      g.numeroOrcamento = numeroOrcamento;
-    }
-
-    g.itens.push(d); // mantém _id de cada item para exclusão
-    g.total += Number(d.valorReal || d.valor || 0);
+    g.itens.push(d);
+    g.total += valor;
   }
 
   return Object.fromEntries(map.entries());
@@ -861,7 +858,98 @@ async function excluirPedido(g){
     (falhas ? `\nFalhas ao remover: ${falhas}` : '')
   );
 
-  // Recarrega lista com o filtro atual
+  await listar($('#q').value.trim());
+  setStatus('ok');
+}
+
+/**
+ * 🧹 Limpa pedidos duplicados mantendo apenas a "versão" mais recente
+ * Critério: versões diferentes = numeroOrcamento diferente.
+ * Mantém a versão cujo item mais recente (createdAt) é o maior.
+ */
+async function limparDuplicadosPedido(g){
+  if (!g || !Array.isArray(g.itens) || g.itens.length <= 1){
+    alert('Não há duplicados para este pedido.');
+    return;
+  }
+
+  // Agrupa itens por numeroOrcamento
+  const versions = new Map();
+  for (const item of g.itens){
+    const key = String(item.numeroOrcamento || item.numero_orcamento || '').trim() || '__sem_orcamento__';
+    const created = item.createdAt ? new Date(item.createdAt).getTime() : 0;
+    const list = versions.get(key) || [];
+    list.push({ item, created });
+    versions.set(key, list);
+  }
+
+  if (versions.size <= 1){
+    alert('Não há duplicados (apenas uma versão deste pedido).');
+    return;
+  }
+
+  // Descobre qual "versão" é a mais recente
+  let keepKey = null;
+  let keepMax = -Infinity;
+
+  for (const [key, list] of versions.entries()){
+    const max = Math.max(...list.map(x => x.created || 0));
+    if (max > keepMax){
+      keepMax = max;
+      keepKey = key;
+    }
+  }
+
+  const deletar = [];
+  for (const [key, list] of versions.entries()){
+    if (key === keepKey) continue;
+    for (const {item} of list){
+      if (item._id) deletar.push(item);
+    }
+  }
+
+  if (!deletar.length){
+    alert('Não há duplicados para remover.');
+    return;
+  }
+
+  const msg = 
+    `Encontramos ${versions.size} versões deste pedido (${g.numeroPedido}).\n` +
+    `Será mantida apenas a versão mais recente.\n\n` +
+    `Itens a remover: ${deletar.length}.\n\n` +
+    `Deseja continuar?`;
+
+  if (!confirm(msg)) return;
+
+  setStatus('limpando duplicados…');
+
+  let removidos = 0;
+  let falhas = 0;
+
+  for (const item of deletar){
+    try{
+      const r = await fetch(`${BASE_URL}/api/produtos/${item._id}`, {
+        method:'DELETE'
+      });
+      let j = {};
+      try{ j = await r.json(); }catch(e){}
+      if (r.ok && (j.ok === undefined || j.ok)){
+        removidos++;
+      } else {
+        falhas++;
+      }
+    }catch(err){
+      console.error('Erro ao excluir item duplicado', item._id, err);
+      falhas++;
+    }
+  }
+
+  alert(
+    `Limpeza concluída.\n` +
+    `Itens removidos: ${removidos}` +
+    (falhas ? `\nFalhas ao remover: ${falhas}` : '')
+  );
+
   await listar($('#q').value.trim());
   setStatus('ok');
 }
@@ -888,6 +976,13 @@ function desenhar(groups){
   values.forEach((g, idx)=>{
     const numOrc = g.numeroOrcamento || '—';
 
+    // verifica se há "versões" diferentes (numeroOrcamento diferentes) dentro do mesmo pedido
+    const versSet = new Set(
+      g.itens.map(i => String(i.numeroOrcamento || i.numero_orcamento || '').trim())
+    );
+    versSet.delete('');
+    const temDuplicados = versSet.size > 1;
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="mono">${g.numeroPedido}</td>
@@ -908,18 +1003,17 @@ function desenhar(groups){
       <td class="center actions-cell">
         <button class="btn primary" data-view>Detalhar</button>
         <button class="btn btn-danger" data-delete>Excluir</button>
+        ${temDuplicados ? '<button class="btn btn-danger" data-clean>Limpar duplicados</button>' : ''}
       </td>
     `;
 
-    // clique na linha = mostra detalhes na direita
     tr.addEventListener('click', (e)=>{
-      if (e.target.closest('button')) return; // deixa o botão agir separado
+      if (e.target.closest('button')) return;
       tbody.querySelectorAll('tr').forEach(row=> row.classList.remove('is-selected'));
       tr.classList.add('is-selected');
       mostrarDetalhesPedido(g);
     });
 
-    // botão para abrir página de gerenciamento
     tr.querySelector('[data-view]').onclick = (e) => {
       e.stopPropagation();
       const url = new URL(REPO_BASE + 'gerenciar.html', window.location.origin);
@@ -927,7 +1021,6 @@ function desenhar(groups){
       window.location.href = url.toString();
     };
 
-    // botão para excluir pedido
     const btnDel = tr.querySelector('[data-delete]');
     if (btnDel){
       btnDel.onclick = (e)=>{
@@ -936,7 +1029,14 @@ function desenhar(groups){
       };
     }
 
-    // seleciona o primeiro por padrão
+    const btnClean = tr.querySelector('[data-clean]');
+    if (btnClean){
+      btnClean.onclick = (e)=>{
+        e.stopPropagation();
+        limparDuplicadosPedido(g);
+      };
+    }
+
     if (idx === 0){
       tr.classList.add('is-selected');
       mostrarDetalhesPedido(g);
